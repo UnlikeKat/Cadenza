@@ -7,7 +7,8 @@ import "./globals.css"
 
 import { Geist, Geist_Mono, Source_Serif_4, Great_Vibes } from 'next/font/google'
 
-// Initialize fontsconst geist = Geist({
+// Initialize fonts
+const geist = Geist({
   subsets: ["latin"],
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
   variable: "--font-sans",
