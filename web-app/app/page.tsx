@@ -21,7 +21,6 @@ export default function CadenzaLanding() {
 
     const handleScroll = () => {
       const currentScrollY = window.scrollY
-      setScrollY(currentScrollY)
 
       // Calculate piano opacity based on scroll position
       // Fade out completely after scrolling 200px
