@@ -11,7 +11,6 @@ export default function CadenzaLanding() {
   const { data: session } = useSession()
   const [mounted, setMounted] = useState(false)
   const [hoveredIcon, setHoveredIcon] = useState<number | null>(null)
-  const [scrollY, setScrollY] = useState(0)
   const [pianoOpacity, setPianoOpacity] = useState(0.3)
 
   const featuresRef = useRef<HTMLDivElement>(null)

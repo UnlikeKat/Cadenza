@@ -47,7 +47,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       }
       
       setLoading(false);
-    } catch (err) {
+    } catch {
       setError('Failed to render music notation');
       setLoading(false);
     }

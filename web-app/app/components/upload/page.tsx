@@ -79,7 +79,7 @@ export default function UploadPage() {
             <ol className="space-y-3 text-gray-400">
               <li>1. 📂 Click above to upload a MusicXML or MIDI file</li>
               <li>2. 🎼 The sheet music will be displayed automatically</li>
-              <li>3. ▶️ Click "Play" to hear the music</li>
+              <li>3. ▶️ Click &quot;Play&quot; to hear the music</li>
               <li>4. 🎹 Follow along with the highlighted notes</li>
             </ol>
           </div>

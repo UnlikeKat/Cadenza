@@ -9,7 +9,7 @@ import { SUPPORTED_FILE_TYPES, MAX_FILE_SIZE } from './types';
  */
 export function isSupportedFileType(filename: string): boolean {
   const extension = `.${filename.split('.').pop()?.toLowerCase()}`;
-  return SUPPORTED_FILE_TYPES.includes(extension as any);
+  return SUPPORTED_FILE_TYPES.includes(extension as typeof SUPPORTED_FILE_TYPES[number]);
 }
 
 /**
