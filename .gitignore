@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env*.local
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Vercel
+.vercel
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma
+/src/generated/prisma
+
+# Uploads (generated files)
+web-app/uploads/
+web-app/outputs/
+uploads/
+outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
