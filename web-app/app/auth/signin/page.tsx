@@ -68,6 +68,24 @@ export default function SignInPage() {
         <div className="absolute top-[65%] left-[18%] text-5xl text-blue-300 animate-float" style={{ animationDelay: "2s", animationDuration: "9s" }}>
           ♬
         </div>
+        <div className="absolute top-[12%] right-[28%] text-6xl text-cyan-400 animate-float" style={{ animationDelay: "0.5s", animationDuration: "10s" }}>
+          ♩
+        </div>
+        <div className="absolute bottom-[15%] left-[8%] text-7xl text-pink-300 animate-float" style={{ animationDelay: "1.3s", animationDuration: "11s" }}>
+          ♮
+        </div>
+        <div className="absolute top-[75%] right-[20%] text-5xl text-purple-300 animate-float" style={{ animationDelay: "2.3s", animationDuration: "9s" }}>
+          𝄢
+        </div>
+        <div className="absolute bottom-[50%] left-[32%] text-6xl text-blue-400 animate-float" style={{ animationDelay: "0.7s", animationDuration: "10s" }}>
+          ♪
+        </div>
+        <div className="absolute top-[42%] left-[5%] text-7xl text-cyan-300 animate-float" style={{ animationDelay: "1.7s", animationDuration: "8s" }}>
+          ♯
+        </div>
+        <div className="absolute bottom-[60%] right-[32%] text-5xl text-pink-400 animate-float" style={{ animationDelay: "0.4s", animationDuration: "12s" }}>
+          ♬
+        </div>
       </div>
 
       <Card className="glass-card w-full max-w-md border-purple-400/40 relative z-10" style={{ borderWidth: "2px" }}>
@@ -79,11 +97,11 @@ export default function SignInPage() {
           <Button
             type="button"
             variant="outline"
-            className="w-full border-purple-400/50 hover:bg-purple-500/10 hover:border-purple-300 hover:text-white transition-colors"
+            className="w-full border-purple-400/50 hover:bg-purple-500/10 hover:border-purple-300 transition-colors text-gray-200 hover:text-white"
             onClick={handleGoogleSignIn}
           >
             <FcGoogle className="mr-2 h-5 w-5" />
-            <span className="text-white">Continue with Google</span>
+            Continue with Google
           </Button>
 
           <div className="relative py-2">
