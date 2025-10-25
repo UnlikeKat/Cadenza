@@ -97,7 +97,7 @@ export default function SignInPage() {
           <Button
             type="button"
             variant="outline"
-            className="w-full border-purple-400/50 hover:bg-purple-500/10 hover:border-purple-300 transition-colors text-gray-200 hover:text-white"
+            className="w-full border-purple-400/50 bg-white hover:bg-purple-500/10 hover:border-purple-300 transition-colors text-black hover:text-white"
             onClick={handleGoogleSignIn}
           >
             <FcGoogle className="mr-2 h-5 w-5" />
@@ -109,7 +109,7 @@ export default function SignInPage() {
               <span className="w-full border-t border-purple-400/30" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-gray-900 px-3 text-gray-400">Or continue with</span>
+              <span className="px-3 text-gray-400">Or continue with</span>
             </div>
           </div>
 
