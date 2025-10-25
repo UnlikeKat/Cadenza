@@ -47,8 +47,30 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen cosmic-bg flex items-center justify-center px-4">
-      <Card className="glass-card w-full max-w-md border-purple-400/40" style={{ borderWidth: "2px" }}>
+    <div className="min-h-screen cosmic-bg flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Floating musical notes background - different pattern */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-15">
+        <div className="absolute top-[20%] left-[10%] text-6xl text-blue-400 animate-float" style={{ animationDelay: "0s", animationDuration: "10s" }}>
+          ♪
+        </div>
+        <div className="absolute top-[30%] right-[15%] text-7xl text-purple-300 animate-float" style={{ animationDelay: "1s", animationDuration: "9s" }}>
+          ♯
+        </div>
+        <div className="absolute bottom-[25%] left-[20%] text-8xl text-cyan-300 animate-float" style={{ animationDelay: "0.8s", animationDuration: "11s" }}>
+          ♫
+        </div>
+        <div className="absolute top-[50%] right-[10%] text-6xl text-pink-400 animate-float" style={{ animationDelay: "1.5s", animationDuration: "8s" }}>
+          𝄞
+        </div>
+        <div className="absolute bottom-[40%] right-[25%] text-7xl text-purple-400 animate-float" style={{ animationDelay: "0.3s", animationDuration: "12s" }}>
+          ♭
+        </div>
+        <div className="absolute top-[65%] left-[18%] text-5xl text-blue-300 animate-float" style={{ animationDelay: "2s", animationDuration: "9s" }}>
+          ♬
+        </div>
+      </div>
+
+      <Card className="glass-card w-full max-w-md border-purple-400/40 relative z-10" style={{ borderWidth: "2px" }}>
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-3xl font-bold gradient-text-subtle">Welcome Back</CardTitle>
           <p className="text-gray-400">Sign in to continue to Cadenza</p>
@@ -57,19 +79,19 @@ export default function SignInPage() {
           <Button
             type="button"
             variant="outline"
-            className="w-full border-purple-400/50 hover:bg-purple-500/20 hover:border-purple-300"
+            className="w-full border-purple-400/50 hover:bg-purple-500/10 hover:border-purple-300 hover:text-white transition-colors"
             onClick={handleGoogleSignIn}
           >
             <FcGoogle className="mr-2 h-5 w-5" />
-            Continue with Google
+            <span className="text-white">Continue with Google</span>
           </Button>
 
-          <div className="relative">
+          <div className="relative py-2">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-purple-400/30" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-transparent px-2 text-gray-400">Or continue with</span>
+              <span className="bg-gray-900 px-3 text-gray-400">Or continue with</span>
             </div>
           </div>
 
