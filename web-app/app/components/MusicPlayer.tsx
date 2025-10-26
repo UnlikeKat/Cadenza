@@ -61,10 +61,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
           
-          // Don't force width to 100% - let it be its natural size for scrolling
+          // Make SVG fill the width for responsive display
           const svgElement = containerRef.current.querySelector('svg');
           if (svgElement) {
-            svgElement.style.maxWidth = 'none';
+            svgElement.style.width = '100%';
             svgElement.style.height = 'auto';
           }
         }
@@ -205,7 +205,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       )}
 
       {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-auto border-2 border-purple-400/50 max-h-[600px]">
+      <div className="bg-white rounded-lg p-4 overflow-y-auto overflow-x-hidden border-2 border-purple-400/50 max-h-[600px]">
         {loading && (
           <div className="text-center text-purple-600 py-8">
             Loading music notation...
@@ -218,7 +218,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           </div>
         )}
         
-        <div ref={containerRef} className="min-h-[200px]" />
+        <div ref={containerRef} className="w-full min-h-[200px]" />
       </div>
 
       {/* Attribution */}
