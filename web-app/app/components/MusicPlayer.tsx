@@ -53,10 +53,6 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           pageWidth: adjustedPageWidth, // Adjust page width inversely to zoom
           adjustPageHeight: true,
           breaks: 'auto', // Auto break measures to fit width
-          pageMarginTop: 0,
-          pageMarginBottom: 0,
-          pageMarginLeft: 0,
-          pageMarginRight: 0,
         });
 
         tk.loadData(musicxml);
