@@ -136,7 +136,7 @@ export default function UploadPage() {
                 <input
                   id="file-upload"
                   type="file"
-                  accept=".xml,.musicxml,.mid,.midi"
+                  accept=".xml,.musicxml,.mid,.midi,application/xml,text/xml,audio/midi,audio/x-midi"
                   onChange={handleInputChange}
                   className="hidden"
                 />
