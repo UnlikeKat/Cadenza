@@ -40,7 +40,7 @@ export default function DashboardPage() {
           <h1 className="text-5xl md:text-6xl font-bold mb-4">
             <span className="gradient-text">Welcome Back!</span>
           </h1>
-          <p className="text-2xl text-gray-300">
+          <p className="text-2xl text-white">
             Hi, <span className="text-purple-400 font-semibold">{session?.user?.name || session?.user?.email}</span> 👋
           </p>
           <p className="text-lg text-white mt-2">
