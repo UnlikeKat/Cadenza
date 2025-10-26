@@ -119,7 +119,7 @@ export default function UploadPage() {
                     d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
                   />
                 </svg>
-                <p className="text-xl font-semibold mb-2">
+                <p className="text-xl font-semibold mb-2 text-white">
                   Drag & drop your music file here
                 </p>
                 <p className="text-gray-400 mb-4">or</p>
@@ -185,7 +185,7 @@ export default function UploadPage() {
                     📂
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg mb-1">1. Upload Your File</h3>
+                    <h3 className="font-semibold text-lg mb-1 text-white">1. Upload Your File</h3>
                     <p className="text-gray-400">
                       Drag & drop or browse for a MusicXML or MIDI file
                     </p>
@@ -197,7 +197,7 @@ export default function UploadPage() {
                     🎼
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg mb-1">2. View Sheet Music</h3>
+                    <h3 className="font-semibold text-lg mb-1 text-white">2. View Sheet Music</h3>
                     <p className="text-gray-400">
                       The sheet music will be displayed automatically
                     </p>
@@ -209,7 +209,7 @@ export default function UploadPage() {
                     ▶️
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg mb-1">3. Play the Music</h3>
+                    <h3 className="font-semibold text-lg mb-1 text-white">3. Play the Music</h3>
                     <p className="text-gray-400">
                       Click play to hear your music come to life
                     </p>
@@ -221,7 +221,7 @@ export default function UploadPage() {
                     🎹
                   </div>
                   <div>
-                    <h3 className="font-semibold text-lg mb-1">4. Practice Along</h3>
+                    <h3 className="font-semibold text-lg mb-1 text-white">4. Practice Along</h3>
                     <p className="text-gray-400">
                       Follow the highlighted notes as you practice
                     </p>

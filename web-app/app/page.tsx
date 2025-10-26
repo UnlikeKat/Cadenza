@@ -5,16 +5,25 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Upload, Music, Sparkles, FileUp, FileText, Keyboard, BarChart3, ArrowRight } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 
 export default function CadenzaLanding() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [hoveredIcon, setHoveredIcon] = useState<number | null>(null)
   const [pianoOpacity, setPianoOpacity] = useState(0.3)
 
   const featuresRef = useRef<HTMLDivElement>(null)
   const [featuresVisible, setFeaturesVisible] = useState(false)
+
+  // Redirect logged-in users to dashboard
+  useEffect(() => {
+    if (session) {
+      router.push('/dashboard')
+    }
+  }, [session, router])
 
   useEffect(() => {
     setMounted(true)
