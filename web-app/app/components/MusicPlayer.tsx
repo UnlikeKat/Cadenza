@@ -15,7 +15,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(100); // Zoom percentage (50-200)
+  const [zoom, setZoom] = useState(50); // Zoom scale (20-100)
   const [showZoomSlider, setShowZoomSlider] = useState(false);
   const synthRef = useRef<Tone.PolySynth | null>(null);
 
@@ -43,11 +43,20 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         const container = containerRef.current.parentElement;
         const containerWidth = container?.clientWidth || 1600;
         
+        // Calculate pageWidth based on zoom - smaller zoom = more measures per line
+        // Higher zoom = fewer measures per line (wraps to next line)
+        const baseWidth = Math.max(containerWidth - 40, 1200);
+        const adjustedPageWidth = Math.floor(baseWidth * (50 / zoom));
+        
         tk.setOptions({
-          scale: 40, // Keep constant, we'll use CSS transform for zoom
-          pageWidth: Math.max(containerWidth - 40, 1600), // Subtract padding, min 1600
+          scale: zoom, // Use zoom as scale - this affects note size
+          pageWidth: adjustedPageWidth, // Adjust page width inversely to zoom
           adjustPageHeight: true,
-          breaks: 'auto',
+          breaks: 'auto', // Auto break measures to fit width
+          pageMarginTop: 0,
+          pageMarginBottom: 0,
+          pageMarginLeft: 0,
+          pageMarginRight: 0,
         });
 
         tk.loadData(musicxml);
@@ -56,11 +65,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
           
-          // Apply zoom via CSS transform
+          // Make SVG fill the width
           const svgElement = containerRef.current.querySelector('svg');
           if (svgElement) {
-            svgElement.style.transformOrigin = 'top left';
-            svgElement.style.transform = `scale(${zoom / 100})`;
+            svgElement.style.width = '100%';
+            svgElement.style.height = 'auto';
           }
         }
         
@@ -150,7 +159,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
             className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2"
             title="Adjust Zoom"
           >
-            🔍 Zoom ({zoom}%)
+            🔍 Zoom
           </button>
         </div>
       </div>
@@ -159,28 +168,43 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       {showZoomSlider && (
         <div className="mb-6 bg-purple-900/50 rounded-lg p-4 border border-purple-400/30">
           <div className="flex items-center gap-4">
-            <span className="text-white text-sm font-semibold min-w-[80px]">Zoom: {zoom}%</span>
+            <span className="text-white text-sm font-semibold min-w-[100px]">Size: {zoom}</span>
+            <button
+              onClick={() => setZoom(Math.max(20, zoom - 5))}
+              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
+            >
+              −
+            </button>
             <input
               type="range"
-              min="50"
-              max="200"
-              step="10"
+              min="20"
+              max="100"
+              step="5"
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
               className="flex-1 h-2 bg-purple-300/30 rounded-lg appearance-none cursor-pointer accent-purple-500"
             />
             <button
-              onClick={() => setZoom(100)}
+              onClick={() => setZoom(Math.min(100, zoom + 5))}
+              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
+            >
+              +
+            </button>
+            <button
+              onClick={() => setZoom(50)}
               className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
             >
               Reset
             </button>
           </div>
+          <p className="text-xs text-purple-300 mt-2">
+            Lower values fit more measures per line • Higher values make notes larger
+          </p>
         </div>
       )}
 
       {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-x-auto border-2 border-purple-400/50">
+      <div className="bg-white rounded-lg p-4 overflow-auto border-2 border-purple-400/50">
         {loading && (
           <div className="text-center text-purple-600 py-8">
             Loading music notation...
@@ -193,7 +217,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           </div>
         )}
         
-        <div ref={containerRef} className="w-full" />
+        <div ref={containerRef} className="w-full min-h-[200px]" />
       </div>
 
       {/* Attribution */}
