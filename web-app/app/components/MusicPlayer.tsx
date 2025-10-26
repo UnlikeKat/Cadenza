@@ -15,7 +15,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(50); // Zoom scale (20-100)
+  const [zoom, setZoom] = useState(35); // Zoom scale (20-100) - lower = more measures per line
   const [showZoomSlider, setShowZoomSlider] = useState(false);
   const synthRef = useRef<Tone.PolySynth | null>(null);
 
@@ -192,7 +192,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
               </button>
             </div>
             <button
-              onClick={() => setZoom(50)}
+              onClick={() => setZoom(35)}
               className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
             >
               Reset
