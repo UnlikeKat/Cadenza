@@ -129,66 +129,71 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   return (
-    <div className="bg-purple-900/30 rounded-lg p-6 border border-purple-400/30">
+    <div className="bg-purple-900/30 rounded-lg p-4 sm:p-6 border border-purple-400/30">
       {/* Controls */}
-      <div className="mb-6 flex gap-4 flex-wrap items-center">
+      <div className="mb-4 sm:mb-6 flex gap-2 sm:gap-4 flex-wrap items-center">
         <button
           onClick={handlePlay}
           disabled={isPlaying || loading}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-purple-900/50 px-6 py-2 rounded-lg font-semibold transition-colors"
+          className="bg-green-600 hover:bg-green-700 disabled:bg-purple-900/50 px-4 sm:px-6 py-2 rounded-lg font-semibold transition-colors"
+          title={isPlaying ? 'Playing...' : 'Play'}
         >
-          {isPlaying ? '⏸️ Playing...' : '▶️ Play'}
+          {isPlaying ? '⏸️' : '▶️'}
+          <span className="hidden sm:inline ml-2">{isPlaying ? 'Playing...' : 'Play'}</span>
         </button>
         
         <button
           onClick={handleStop}
           disabled={!isPlaying}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-purple-900/50 px-6 py-2 rounded-lg font-semibold transition-colors"
+          className="bg-red-600 hover:bg-red-700 disabled:bg-purple-900/50 px-4 sm:px-6 py-2 rounded-lg font-semibold transition-colors"
+          title="Stop"
         >
-          ⏹️ Stop
+          ⏹️
+          <span className="hidden sm:inline ml-2">Stop</span>
         </button>
 
         {/* Zoom Controls */}
-        <div className="flex gap-2 ml-auto items-center">
-          <button
-            onClick={() => setShowZoomSlider(!showZoomSlider)}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2"
-            title="Adjust Zoom"
-          >
-            🔍 Zoom
-          </button>
-        </div>
+        <button
+          onClick={() => setShowZoomSlider(!showZoomSlider)}
+          className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2"
+          title="Adjust Zoom"
+        >
+          🔍
+          <span className="hidden sm:inline">Zoom</span>
+        </button>
       </div>
 
       {/* Zoom Slider */}
       {showZoomSlider && (
-        <div className="mb-6 bg-purple-900/50 rounded-lg p-4 border border-purple-400/30">
-          <div className="flex items-center gap-4">
-            <span className="text-white text-sm font-semibold min-w-[100px]">Size: {zoom}</span>
-            <button
-              onClick={() => setZoom(Math.max(20, zoom - 5))}
-              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
-            >
-              −
-            </button>
-            <input
-              type="range"
-              min="20"
-              max="100"
-              step="5"
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="flex-1 h-2 bg-purple-300/30 rounded-lg appearance-none cursor-pointer accent-purple-500"
-            />
-            <button
-              onClick={() => setZoom(Math.min(100, zoom + 5))}
-              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
-            >
-              +
-            </button>
+        <div className="mb-4 sm:mb-6 bg-purple-900/50 rounded-lg p-3 sm:p-4 border border-purple-400/30">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <span className="text-white text-sm font-semibold">Size: {zoom}</span>
+            <div className="flex items-center gap-2 flex-1">
+              <button
+                onClick={() => setZoom(Math.max(20, zoom - 5))}
+                className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
+              >
+                −
+              </button>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                step="5"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-300/30 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+              <button
+                onClick={() => setZoom(Math.min(100, zoom + 5))}
+                className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
+              >
+                +
+              </button>
+            </div>
             <button
               onClick={() => setZoom(50)}
-              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
+              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
             >
               Reset
             </button>

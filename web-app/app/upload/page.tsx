@@ -147,10 +147,10 @@ export default function UploadPage() {
 
               {file && (
                 <div className="mt-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-                  <p className="text-green-400 font-semibold">
+                  <p className="text-green-400 font-semibold break-words">
                     ✅ {file.name}
                   </p>
-                  <p className="text-sm text-gray-400 mt-1">
+                  <p className="text-sm text-white mt-1">
                     Type: {fileType?.toUpperCase()}
                   </p>
                 </div>
