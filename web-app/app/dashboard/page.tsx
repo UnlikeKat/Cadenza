@@ -43,7 +43,7 @@ export default function DashboardPage() {
           <p className="text-2xl text-gray-300">
             Hi, <span className="text-purple-400 font-semibold">{session?.user?.name || session?.user?.email}</span> 👋
           </p>
-          <p className="text-lg text-gray-400 mt-2">
+          <p className="text-lg text-white mt-2">
             What would you like to practice today?
           </p>
         </div>
