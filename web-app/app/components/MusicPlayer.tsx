@@ -33,10 +33,17 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       setLoading(true);
       
       const tk = new verovio.toolkit();
+      
+      // Get the container width for responsive rendering
+      const containerWidth = containerRef.current.parentElement?.clientWidth || 1200;
+      
       tk.setOptions({
         scale: 40,
-        pageWidth: 1000,
+        pageWidth: Math.max(containerWidth * 0.95, 1200), // Use container width, min 1200
         adjustPageHeight: true,
+        breaks: 'auto',
+        spacingStaff: 8,
+        spacingSystem: 8,
       });
 
       tk.loadData(musicxml);
@@ -123,7 +130,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       </div>
 
       {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-auto">
+      <div className="bg-white rounded-lg p-4 overflow-x-auto">
         {loading && (
           <div className="text-center text-gray-500 py-8">
             Loading music notation...
@@ -136,7 +143,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           </div>
         )}
         
-        <div ref={containerRef} />
+        <div ref={containerRef} className="w-full" />
       </div>
 
       {/* Attribution */}
