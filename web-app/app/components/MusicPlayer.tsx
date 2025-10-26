@@ -15,7 +15,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(40); // Verovio scale
+  const [zoom, setZoom] = useState(100); // Zoom percentage (50-200)
+  const [showZoomSlider, setShowZoomSlider] = useState(false);
   const synthRef = useRef<Tone.PolySynth | null>(null);
 
   // Initialize Tone.js synthesizer
@@ -43,7 +44,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         const containerWidth = container?.clientWidth || 1600;
         
         tk.setOptions({
-          scale: zoom,
+          scale: 40, // Keep constant, we'll use CSS transform for zoom
           pageWidth: Math.max(containerWidth - 40, 1600), // Subtract padding, min 1600
           adjustPageHeight: true,
           breaks: 'auto',
@@ -55,11 +56,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
           
-          // Make SVG responsive
+          // Apply zoom via CSS transform
           const svgElement = containerRef.current.querySelector('svg');
           if (svgElement) {
-            svgElement.style.width = '100%';
-            svgElement.style.height = 'auto';
+            svgElement.style.transformOrigin = 'top left';
+            svgElement.style.transform = `scale(${zoom / 100})`;
           }
         }
         
@@ -125,7 +126,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   return (
     <div className="bg-purple-900/30 rounded-lg p-6 border border-purple-400/30">
       {/* Controls */}
-      <div className="mb-6 flex gap-4 flex-wrap">
+      <div className="mb-6 flex gap-4 flex-wrap items-center">
         <button
           onClick={handlePlay}
           disabled={isPlaying || loading}
@@ -144,24 +145,39 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
         {/* Zoom Controls */}
         <div className="flex gap-2 ml-auto items-center">
-          <span className="text-sm text-white mr-2">Zoom:</span>
           <button
-            onClick={() => setZoom(Math.max(20, zoom - 10))}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors"
-            title="Zoom Out"
+            onClick={() => setShowZoomSlider(!showZoomSlider)}
+            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2"
+            title="Adjust Zoom"
           >
-            🔍−
-          </button>
-          <span className="text-white font-mono text-sm w-12 text-center">{zoom}%</span>
-          <button
-            onClick={() => setZoom(Math.min(100, zoom + 10))}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors"
-            title="Zoom In"
-          >
-            🔍+
+            🔍 Zoom ({zoom}%)
           </button>
         </div>
       </div>
+
+      {/* Zoom Slider */}
+      {showZoomSlider && (
+        <div className="mb-6 bg-purple-900/50 rounded-lg p-4 border border-purple-400/30">
+          <div className="flex items-center gap-4">
+            <span className="text-white text-sm font-semibold min-w-[80px]">Zoom: {zoom}%</span>
+            <input
+              type="range"
+              min="50"
+              max="200"
+              step="10"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="flex-1 h-2 bg-purple-300/30 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            />
+            <button
+              onClick={() => setZoom(100)}
+              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sheet Music Display */}
       <div className="bg-white rounded-lg p-4 overflow-x-auto border-2 border-purple-400/50">
