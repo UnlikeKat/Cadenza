@@ -42,8 +42,6 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         pageWidth: Math.max(containerWidth * 0.95, 1200), // Use container width, min 1200
         adjustPageHeight: true,
         breaks: 'auto',
-        spacingStaff: 8,
-        spacingSystem: 8,
       });
 
       tk.loadData(musicxml);
