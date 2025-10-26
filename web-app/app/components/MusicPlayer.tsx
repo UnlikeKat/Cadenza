@@ -29,33 +29,48 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   useEffect(() => {
     if (!musicxml || !containerRef.current) return;
 
-    try {
-      setLoading(true);
-      
-      const tk = new verovio.toolkit();
-      
-      // Get the container width for responsive rendering
-      const containerWidth = containerRef.current.parentElement?.clientWidth || 1200;
-      
-      tk.setOptions({
-        scale: 40,
-        pageWidth: Math.max(containerWidth * 0.95, 1200), // Use container width, min 1200
-        adjustPageHeight: true,
-        breaks: 'auto',
-      });
+    const renderMusic = () => {
+      if (!containerRef.current) return;
 
-      tk.loadData(musicxml);
-      const svg = tk.renderToSVG(1);
-      
-      if (containerRef.current) {
-        containerRef.current.innerHTML = svg;
+      try {
+        setLoading(true);
+        
+        const tk = new verovio.toolkit();
+        
+        // Get the actual container width (wait for layout to be ready)
+        const container = containerRef.current.parentElement;
+        const containerWidth = container?.clientWidth || 1600;
+        
+        tk.setOptions({
+          scale: 40,
+          pageWidth: Math.max(containerWidth - 40, 1600), // Subtract padding, min 1600
+          adjustPageHeight: true,
+          breaks: 'auto',
+        });
+
+        tk.loadData(musicxml);
+        const svg = tk.renderToSVG(1);
+        
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg;
+          
+          // Make SVG responsive
+          const svgElement = containerRef.current.querySelector('svg');
+          if (svgElement) {
+            svgElement.style.width = '100%';
+            svgElement.style.height = 'auto';
+          }
+        }
+        
+        setLoading(false);
+      } catch {
+        setError('Failed to render music notation');
+        setLoading(false);
       }
-      
-      setLoading(false);
-    } catch {
-      setError('Failed to render music notation');
-      setLoading(false);
-    }
+    };
+
+    // Wait a tick for the DOM to be ready
+    setTimeout(renderMusic, 0);
   }, [musicxml]);
 
   // Play MIDI
