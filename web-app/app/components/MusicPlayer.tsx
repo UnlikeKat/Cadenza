@@ -15,6 +15,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(40); // Verovio scale
   const synthRef = useRef<Tone.PolySynth | null>(null);
 
   // Initialize Tone.js synthesizer
@@ -42,7 +43,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         const containerWidth = container?.clientWidth || 1600;
         
         tk.setOptions({
-          scale: 40,
+          scale: zoom,
           pageWidth: Math.max(containerWidth - 40, 1600), // Subtract padding, min 1600
           adjustPageHeight: true,
           breaks: 'auto',
@@ -71,7 +72,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     // Wait a tick for the DOM to be ready
     setTimeout(renderMusic, 0);
-  }, [musicxml]);
+  }, [musicxml, zoom]);
 
   // Play MIDI
   const playMidi = async (file: File) => {
@@ -122,13 +123,13 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-purple-900/30 rounded-lg p-6 border border-purple-400/30">
       {/* Controls */}
-      <div className="mb-6 flex gap-4">
+      <div className="mb-6 flex gap-4 flex-wrap">
         <button
           onClick={handlePlay}
           disabled={isPlaying || loading}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-2 rounded-lg font-semibold transition-colors"
+          className="bg-green-600 hover:bg-green-700 disabled:bg-purple-900/50 px-6 py-2 rounded-lg font-semibold transition-colors"
         >
           {isPlaying ? '⏸️ Playing...' : '▶️ Play'}
         </button>
@@ -136,16 +137,36 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         <button
           onClick={handleStop}
           disabled={!isPlaying}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-6 py-2 rounded-lg font-semibold transition-colors"
+          className="bg-red-600 hover:bg-red-700 disabled:bg-purple-900/50 px-6 py-2 rounded-lg font-semibold transition-colors"
         >
           ⏹️ Stop
         </button>
+
+        {/* Zoom Controls */}
+        <div className="flex gap-2 ml-auto items-center">
+          <span className="text-sm text-white mr-2">Zoom:</span>
+          <button
+            onClick={() => setZoom(Math.max(20, zoom - 10))}
+            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors"
+            title="Zoom Out"
+          >
+            🔍−
+          </button>
+          <span className="text-white font-mono text-sm w-12 text-center">{zoom}%</span>
+          <button
+            onClick={() => setZoom(Math.min(100, zoom + 10))}
+            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors"
+            title="Zoom In"
+          >
+            🔍+
+          </button>
+        </div>
       </div>
 
       {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-x-auto">
+      <div className="bg-white rounded-lg p-4 overflow-x-auto border-2 border-purple-400/50">
         {loading && (
-          <div className="text-center text-gray-500 py-8">
+          <div className="text-center text-purple-600 py-8">
             Loading music notation...
           </div>
         )}
@@ -160,7 +181,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       </div>
 
       {/* Attribution */}
-      <div className="text-xs text-gray-500 mt-4 text-center">
+      <div className="text-xs text-purple-300 mt-4 text-center">
         Rendered with{' '}
         <a 
           href="https://www.verovio.org" 

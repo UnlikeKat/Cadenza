@@ -84,7 +84,7 @@ export default function UploadPage() {
           <h1 className="text-5xl md:text-6xl font-bold mb-4">
             <span className="gradient-text">Upload Your Music</span>
           </h1>
-          <p className="text-xl text-gray-300">
+          <p className="text-xl text-white">
             Welcome back, <span className="text-purple-400 font-semibold">{session?.user?.name || session?.user?.email}</span>
           </p>
         </div>
