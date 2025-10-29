@@ -17,13 +17,66 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(35); // Zoom scale (20-100) - lower = more measures per line
   const [showZoomSlider, setShowZoomSlider] = useState(false);
-  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const [instrumentLoading, setInstrumentLoading] = useState(false);
+  const pianoRef = useRef<Tone.Sampler | null>(null);
+  const scheduledPartsRef = useRef<Tone.Part[]>([]);
 
-  // Initialize Tone.js synthesizer
+  // Initialize high-quality piano sampler
   useEffect(() => {
-    synthRef.current = new Tone.PolySynth(Tone.Synth).toDestination();
+    setInstrumentLoading(true);
+    
+    // Create a high-quality piano sampler with multiple velocity layers
+    pianoRef.current = new Tone.Sampler({
+      urls: {
+        A0: "A0.mp3",
+        C1: "C1.mp3",
+        "D#1": "Ds1.mp3",
+        "F#1": "Fs1.mp3",
+        A1: "A1.mp3",
+        C2: "C2.mp3",
+        "D#2": "Ds2.mp3",
+        "F#2": "Fs2.mp3",
+        A2: "A2.mp3",
+        C3: "C3.mp3",
+        "D#3": "Ds3.mp3",
+        "F#3": "Fs3.mp3",
+        A3: "A3.mp3",
+        C4: "C4.mp3",
+        "D#4": "Ds4.mp3",
+        "F#4": "Fs4.mp3",
+        A4: "A4.mp3",
+        C5: "C5.mp3",
+        "D#5": "Ds5.mp3",
+        "F#5": "Fs5.mp3",
+        A5: "A5.mp3",
+        C6: "C6.mp3",
+        "D#6": "Ds6.mp3",
+        "F#6": "Fs6.mp3",
+        A6: "A6.mp3",
+        C7: "C7.mp3",
+        "D#7": "Ds7.mp3",
+        "F#7": "Fs7.mp3",
+        A7: "A7.mp3",
+        C8: "C8.mp3"
+      },
+      release: 1,
+      baseUrl: "https://tonejs.github.io/audio/salamander/",
+      onload: () => {
+        setInstrumentLoading(false);
+      }
+    }).toDestination();
+
+    // Add reverb for more realistic sound
+    const reverb = new Tone.Reverb({
+      decay: 2.5,
+      wet: 0.3
+    }).toDestination();
+    
+    pianoRef.current.connect(reverb);
+
     return () => {
-      synthRef.current?.dispose();
+      pianoRef.current?.dispose();
+      reverb.dispose();
     };
   }, []);
 
@@ -92,9 +145,9 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     setTimeout(renderMusic, 0);
   }, [musicxml, zoom]);
 
-  // Play MIDI
+  // Play MIDI with high-quality piano
   const playMidi = async (file: File) => {
-    if (!synthRef.current) return;
+    if (!pianoRef.current || instrumentLoading) return;
 
     try {
       setIsPlaying(true);
@@ -103,24 +156,39 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       const arrayBuffer = await file.arrayBuffer();
       const midi = new Midi(arrayBuffer);
 
-      // Schedule all notes
-      const now = Tone.now();
-      
+      // Clear any previously scheduled parts
+      scheduledPartsRef.current.forEach(part => part.dispose());
+      scheduledPartsRef.current = [];
+
+      // Schedule all tracks
       midi.tracks.forEach(track => {
-        track.notes.forEach(note => {
-          synthRef.current?.triggerAttackRelease(
+        const part = new Tone.Part((time, note) => {
+          pianoRef.current?.triggerAttackRelease(
             note.name,
             note.duration,
-            now + note.time,
+            time,
             note.velocity
           );
-        });
+        }, track.notes.map(note => ({
+          time: note.time,
+          name: note.name,
+          duration: note.duration,
+          velocity: note.velocity
+        })));
+
+        part.start(0);
+        scheduledPartsRef.current.push(part);
       });
+
+      // Start transport
+      Tone.Transport.start();
 
       // Stop playing after duration
       setTimeout(() => {
+        Tone.Transport.stop();
+        scheduledPartsRef.current.forEach(part => part.stop());
         setIsPlaying(false);
-      }, midi.duration * 1000);
+      }, midi.duration * 1000 + 500); // Add 500ms buffer
 
     } catch (err) {
       console.error('Playback error:', err);
@@ -136,7 +204,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   const handleStop = () => {
-    synthRef.current?.releaseAll();
+    Tone.Transport.stop();
+    scheduledPartsRef.current.forEach(part => part.stop());
     setIsPlaying(false);
   };
 
@@ -146,12 +215,14 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       <div className="mb-4 sm:mb-6 flex gap-2 sm:gap-4 flex-wrap items-center">
         <button
           onClick={handlePlay}
-          disabled={isPlaying || loading}
+          disabled={isPlaying || loading || instrumentLoading}
           className="bg-green-600 hover:bg-green-700 disabled:bg-purple-900/50 px-4 sm:px-6 py-2 rounded-lg font-semibold transition-colors"
-          title={isPlaying ? 'Playing...' : 'Play'}
+          title={instrumentLoading ? 'Loading piano...' : isPlaying ? 'Playing...' : 'Play'}
         >
-          {isPlaying ? '⏸️' : '▶️'}
-          <span className="hidden sm:inline ml-2">{isPlaying ? 'Playing...' : 'Play'}</span>
+          {instrumentLoading ? '⏳' : isPlaying ? '⏸️' : '▶️'}
+          <span className="hidden sm:inline ml-2">
+            {instrumentLoading ? 'Loading...' : isPlaying ? 'Playing...' : 'Play'}
+          </span>
         </button>
         
         <button
