@@ -20,6 +20,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [instrumentLoading, setInstrumentLoading] = useState(false);
   const pianoRef = useRef<Tone.Sampler | null>(null);
   const scheduledPartsRef = useRef<Tone.Part[]>([]);
+  const verovioRef = useRef<typeof verovio.toolkit | null>(null);
 
   // Initialize high-quality piano sampler
   useEffect(() => {
@@ -91,6 +92,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         setLoading(true);
         
         const tk = new verovio.toolkit();
+        verovioRef.current = tk;
         
         // Get the actual container width (wait for layout to be ready)
         const container = containerRef.current.parentElement;
@@ -145,16 +147,30 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     setTimeout(renderMusic, 0);
   }, [musicxml, zoom]);
 
-  // Play MIDI with high-quality piano
-  const playMidi = async (file: File) => {
+  // Play MusicXML or MIDI with high-quality piano
+  const handlePlay = async () => {
     if (!pianoRef.current || instrumentLoading) return;
 
     try {
       setIsPlaying(true);
       await Tone.start(); // Start audio context
 
-      const arrayBuffer = await file.arrayBuffer();
-      const midi = new Midi(arrayBuffer);
+      let midi: Midi;
+
+      if (midiFile) {
+        // If we have a MIDI file, use it directly
+        const arrayBuffer = await midiFile.arrayBuffer();
+        midi = new Midi(arrayBuffer);
+      } else if (musicxml && verovioRef.current) {
+        // Convert MusicXML to MIDI using Verovio
+        const midiBase64 = verovioRef.current.renderToMIDI();
+        const midiData = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
+        midi = new Midi(midiData.buffer);
+      } else {
+        setError('No music data to play');
+        setIsPlaying(false);
+        return;
+      }
 
       // Clear any previously scheduled parts
       scheduledPartsRef.current.forEach(part => part.dispose());
@@ -162,6 +178,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
       // Schedule all tracks
       midi.tracks.forEach(track => {
+        if (track.notes.length === 0) return; // Skip empty tracks
+
         const part = new Tone.Part((time, note) => {
           pianoRef.current?.triggerAttackRelease(
             note.name,
@@ -186,26 +204,30 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       // Stop playing after duration
       setTimeout(() => {
         Tone.Transport.stop();
-        scheduledPartsRef.current.forEach(part => part.stop());
+        Tone.Transport.position = 0;
+        scheduledPartsRef.current.forEach(part => {
+          part.stop();
+          part.dispose();
+        });
+        scheduledPartsRef.current = [];
         setIsPlaying(false);
-      }, midi.duration * 1000 + 500); // Add 500ms buffer
+      }, midi.duration * 1000 + 1000); // Add 1s buffer
 
     } catch (err) {
       console.error('Playback error:', err);
-      setError('Failed to play MIDI file');
+      setError('Failed to play music');
       setIsPlaying(false);
-    }
-  };
-
-  const handlePlay = () => {
-    if (midiFile) {
-      playMidi(midiFile);
     }
   };
 
   const handleStop = () => {
     Tone.Transport.stop();
-    scheduledPartsRef.current.forEach(part => part.stop());
+    Tone.Transport.position = 0;
+    scheduledPartsRef.current.forEach(part => {
+      part.stop();
+      part.dispose();
+    });
+    scheduledPartsRef.current = [];
     setIsPlaying(false);
   };
 
