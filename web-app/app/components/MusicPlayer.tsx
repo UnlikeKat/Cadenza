@@ -26,7 +26,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   useEffect(() => {
     setInstrumentLoading(true);
     
-    // Create a high-quality piano sampler with better settings
+    // Create a high-quality piano sampler with warmer settings
     pianoRef.current = new Tone.Sampler({
       urls: {
         A0: "A0.mp3",
@@ -60,46 +60,60 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         A7: "A7.mp3",
         C8: "C8.mp3"
       },
-      release: 0.8,
-      attack: 0.005,
+      release: 1.5,
+      attack: 0.01,
+      curve: "exponential",
       baseUrl: "https://tonejs.github.io/audio/salamander/",
       onload: () => {
         setInstrumentLoading(false);
       }
     });
 
-    // Add EQ to reduce muddiness
+    // Low-pass filter for warmth
+    const filter = new Tone.Filter({
+      frequency: 8000,
+      type: "lowpass",
+      rolloff: -12
+    });
+
+    // EQ for warmth and body
     const eq = new Tone.EQ3({
-      low: -3,
-      mid: 2,
-      high: 4,
-      lowFrequency: 200,
-      highFrequency: 3000
+      low: 3,      // Boost bass for warmth
+      mid: 1,      // Slight mid boost
+      high: -1,    // Gentle high cut for warmth
+      lowFrequency: 250,
+      highFrequency: 4000
     });
 
-    // Add subtle reverb for warmth without muddiness
+    // Warmer, more enveloping reverb
     const reverb = new Tone.Reverb({
-      decay: 1.2,
-      wet: 0.15,
-      preDelay: 0.01
+      decay: 2.8,
+      wet: 0.35,
+      preDelay: 0.015
     });
 
-    // Add gentle compression for clarity
+    // Gentle compression for glue
     const compressor = new Tone.Compressor({
-      threshold: -20,
-      ratio: 3,
-      attack: 0.003,
-      release: 0.1
+      threshold: -18,
+      ratio: 2.5,
+      attack: 0.005,
+      release: 0.15,
+      knee: 6
     });
 
-    // Signal chain: Piano -> EQ -> Reverb -> Compressor -> Output
-    pianoRef.current.chain(eq, reverb, compressor, Tone.Destination);
+    // Final master gain for overall warmth
+    const masterGain = new Tone.Gain(1.1);
+
+    // Signal chain: Piano -> Filter -> EQ -> Reverb -> Compressor -> Gain -> Output
+    pianoRef.current.chain(filter, eq, reverb, compressor, masterGain, Tone.Destination);
 
     return () => {
       pianoRef.current?.dispose();
+      filter.dispose();
       eq.dispose();
       reverb.dispose();
       compressor.dispose();
+      masterGain.dispose();
     };
   }, []);
 
@@ -199,29 +213,35 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       scheduledPartsRef.current.forEach(part => part.dispose());
       scheduledPartsRef.current = [];
 
-      // Get all note elements for highlighting
-      const noteElements = containerRef.current?.querySelectorAll('.note') || [];
+      // Get all note head elements for highlighting (Verovio uses 'use' elements with 'notehead' class)
+      const noteElements = containerRef.current?.querySelectorAll('[class*="notehead"], [class*="note"]') || [];
       let currentNoteIndex = 0;
 
-      // Schedule all tracks with highlighting
+      // Schedule all tracks with highlighting and proper dynamics
       midi.tracks.forEach(track => {
         if (track.notes.length === 0) return; // Skip empty tracks
 
         const part = new Tone.Part((time, note) => {
-          // Play the note
+          // Scale velocity for more dynamic range (0.3 to 1.0 instead of 0 to 1)
+          const scaledVelocity = 0.3 + (note.velocity * 0.7);
+          
+          // Play the note with proper dynamics
           pianoRef.current?.triggerAttackRelease(
             note.name,
             note.duration,
             time,
-            note.velocity
+            scaledVelocity
           );
 
           // Highlight the note
           Tone.Draw.schedule(() => {
             // Remove previous highlight
-            noteElements.forEach(el => {
-              el.classList.remove('playing-note');
-            });
+            if (containerRef.current) {
+              const highlighted = containerRef.current.querySelectorAll('.playing-note');
+              highlighted.forEach(el => {
+                el.classList.remove('playing-note');
+              });
+            }
 
             // Add highlight to current note
             if (currentNoteIndex < noteElements.length) {
@@ -236,7 +256,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
                   const containerRect = container.getBoundingClientRect();
                   
                   // Check if note is out of view
-                  if (noteRect.top < containerRect.top || noteRect.bottom > containerRect.bottom) {
+                  if (noteRect.top < containerRect.top + 100 || noteRect.bottom > containerRect.bottom - 100) {
                     noteEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }
                 }

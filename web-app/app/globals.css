@@ -434,12 +434,17 @@
   /* Note highlighting during playback */
   :global(.playing-note) {
     fill: #a78bfa !important;
-    opacity: 0.9 !important;
-    filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.8));
-    transition: all 0.1s ease-in-out;
+    stroke: #c084fc !important;
+    stroke-width: 2 !important;
+    opacity: 1 !important;
+    filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.9)) !important;
+    transition: all 0.08s ease-in-out !important;
+    transform: scale(1.15);
+    transform-origin: center;
   }
 
-  :global(.note) {
-    transition: fill 0.1s ease-in-out;
+  :global([class*="notehead"]),
+  :global([class*="note"]) {
+    transition: fill 0.08s ease-in-out, transform 0.08s ease-in-out;
   }
 }
