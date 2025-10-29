@@ -20,7 +20,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [instrumentLoading, setInstrumentLoading] = useState(false);
   const pianoRef = useRef<Tone.Sampler | null>(null);
   const scheduledPartsRef = useRef<Tone.Part[]>([]);
-  const verovioRef = useRef<typeof verovio.toolkit | null>(null);
+  const verovioRef = useRef<InstanceType<typeof verovio.toolkit> | null>(null);
 
   // Initialize high-quality piano sampler
   useEffect(() => {
