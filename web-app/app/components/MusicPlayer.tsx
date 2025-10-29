@@ -163,7 +163,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         midi = new Midi(arrayBuffer);
       } else if (musicxml && verovioRef.current) {
         // Convert MusicXML to MIDI using Verovio
-        const midiBase64 = verovioRef.current.renderToMIDI() as string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const midiBase64 = (verovioRef.current as any).renderToMIDI() as string;
         const midiData = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
         midi = new Midi(midiData.buffer);
       } else {
