@@ -56,17 +56,29 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         });
 
         tk.loadData(musicxml);
-        const svg = tk.renderToSVG(1);
+        
+        // Get the total number of pages
+        const pageCount = tk.getPageCount();
+        
+        // Render all pages and combine them
+        let allSvg = '';
+        for (let i = 1; i <= pageCount; i++) {
+          allSvg += tk.renderToSVG(i);
+        }
         
         if (containerRef.current) {
-          containerRef.current.innerHTML = svg;
+          containerRef.current.innerHTML = allSvg;
           
-          // Make SVG fill the width for responsive display
-          const svgElement = containerRef.current.querySelector('svg');
-          if (svgElement) {
-            svgElement.style.width = '100%';
-            svgElement.style.height = 'auto';
-          }
+          // Make all SVGs fill the width for responsive display
+          const svgElements = containerRef.current.querySelectorAll('svg');
+          svgElements.forEach((svgElement: Element) => {
+            if (svgElement instanceof SVGElement) {
+              svgElement.style.width = '100%';
+              svgElement.style.height = 'auto';
+              svgElement.style.display = 'block';
+              svgElement.style.marginBottom = '1rem';
+            }
+          });
         }
         
         setLoading(false);
