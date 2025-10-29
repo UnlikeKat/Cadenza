@@ -205,7 +205,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       )}
 
       {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-y-auto overflow-x-hidden border-2 border-purple-400/50 max-h-[600px]">
+      <div className="bg-white rounded-lg p-4 overflow-y-auto overflow-x-hidden border-2 border-purple-400/50 max-h-[600px] touch-pan-y">
         {loading && (
           <div className="text-center text-purple-600 py-8">
             Loading music notation...
