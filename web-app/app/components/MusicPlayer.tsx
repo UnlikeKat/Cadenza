@@ -26,7 +26,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   useEffect(() => {
     setInstrumentLoading(true);
     
-    // Create a high-quality piano sampler with multiple velocity layers
+    // Create a high-quality piano sampler with better settings
     pianoRef.current = new Tone.Sampler({
       urls: {
         A0: "A0.mp3",
@@ -60,24 +60,46 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         A7: "A7.mp3",
         C8: "C8.mp3"
       },
-      release: 1,
+      release: 0.8,
+      attack: 0.005,
       baseUrl: "https://tonejs.github.io/audio/salamander/",
       onload: () => {
         setInstrumentLoading(false);
       }
-    }).toDestination();
+    });
 
-    // Add reverb for more realistic sound
+    // Add EQ to reduce muddiness
+    const eq = new Tone.EQ3({
+      low: -3,
+      mid: 2,
+      high: 4,
+      lowFrequency: 200,
+      highFrequency: 3000
+    });
+
+    // Add subtle reverb for warmth without muddiness
     const reverb = new Tone.Reverb({
-      decay: 2.5,
-      wet: 0.3
-    }).toDestination();
-    
-    pianoRef.current.connect(reverb);
+      decay: 1.2,
+      wet: 0.15,
+      preDelay: 0.01
+    });
+
+    // Add gentle compression for clarity
+    const compressor = new Tone.Compressor({
+      threshold: -20,
+      ratio: 3,
+      attack: 0.003,
+      release: 0.1
+    });
+
+    // Signal chain: Piano -> EQ -> Reverb -> Compressor -> Output
+    pianoRef.current.chain(eq, reverb, compressor, Tone.Destination);
 
     return () => {
       pianoRef.current?.dispose();
+      eq.dispose();
       reverb.dispose();
+      compressor.dispose();
     };
   }, []);
 
@@ -147,7 +169,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     setTimeout(renderMusic, 0);
   }, [musicxml, zoom]);
 
-  // Play MusicXML or MIDI with high-quality piano
+  // Play MusicXML or MIDI with high-quality piano and note highlighting
   const handlePlay = async () => {
     if (!pianoRef.current || instrumentLoading) return;
 
@@ -177,17 +199,52 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       scheduledPartsRef.current.forEach(part => part.dispose());
       scheduledPartsRef.current = [];
 
-      // Schedule all tracks
+      // Get all note elements for highlighting
+      const noteElements = containerRef.current?.querySelectorAll('.note') || [];
+      let currentNoteIndex = 0;
+
+      // Schedule all tracks with highlighting
       midi.tracks.forEach(track => {
         if (track.notes.length === 0) return; // Skip empty tracks
 
         const part = new Tone.Part((time, note) => {
+          // Play the note
           pianoRef.current?.triggerAttackRelease(
             note.name,
             note.duration,
             time,
             note.velocity
           );
+
+          // Highlight the note
+          Tone.Draw.schedule(() => {
+            // Remove previous highlight
+            noteElements.forEach(el => {
+              el.classList.remove('playing-note');
+            });
+
+            // Add highlight to current note
+            if (currentNoteIndex < noteElements.length) {
+              const noteEl = noteElements[currentNoteIndex];
+              noteEl.classList.add('playing-note');
+              
+              // Auto-scroll to keep the playing note visible
+              if (containerRef.current) {
+                const container = containerRef.current.parentElement;
+                if (container && noteEl instanceof HTMLElement) {
+                  const noteRect = noteEl.getBoundingClientRect();
+                  const containerRect = container.getBoundingClientRect();
+                  
+                  // Check if note is out of view
+                  if (noteRect.top < containerRect.top || noteRect.bottom > containerRect.bottom) {
+                    noteEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }
+              }
+              
+              currentNoteIndex++;
+            }
+          }, time);
         }, track.notes.map(note => ({
           time: note.time,
           name: note.name,
