@@ -59,21 +59,21 @@ export default function UploadPage() {
     <div className="min-h-screen cosmic-bg text-white relative overflow-hidden">
       <div className="fixed inset-0 cosmic-grid opacity-40 pointer-events-none" />
 
-      {/* Floating musical notes background */}
+      {/* Floating musical notes background - optimized for performance */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-10">
-        <div className="absolute top-[10%] left-[5%] text-6xl text-purple-400 animate-float" style={{ animationDelay: "0s", animationDuration: "8s" }}>
+        <div className="absolute top-[10%] left-[5%] text-6xl text-purple-400 animate-float will-change-transform" style={{ animationDelay: "0s", animationDuration: "8s", transform: "translateZ(0)" }}>
           ♪
         </div>
-        <div className="absolute top-[20%] right-[10%] text-7xl text-cyan-400 animate-float" style={{ animationDelay: "1s", animationDuration: "10s" }}>
+        <div className="absolute top-[20%] right-[10%] text-7xl text-cyan-400 animate-float will-change-transform" style={{ animationDelay: "1s", animationDuration: "10s", transform: "translateZ(0)" }}>
           ♫
         </div>
-        <div className="absolute bottom-[30%] left-[15%] text-8xl text-pink-400 animate-float" style={{ animationDelay: "0.5s", animationDuration: "9s" }}>
+        <div className="absolute bottom-[30%] left-[15%] text-8xl text-pink-400 animate-float will-change-transform hidden sm:block" style={{ animationDelay: "0.5s", animationDuration: "9s", transform: "translateZ(0)" }}>
           ♬
         </div>
-        <div className="absolute top-[50%] right-[20%] text-6xl text-blue-300 animate-float" style={{ animationDelay: "1.5s", animationDuration: "11s" }}>
+        <div className="absolute top-[50%] right-[20%] text-6xl text-blue-300 animate-float will-change-transform hidden md:block" style={{ animationDelay: "1.5s", animationDuration: "11s", transform: "translateZ(0)" }}>
           ♩
         </div>
-        <div className="absolute bottom-[15%] right-[8%] text-7xl text-purple-300 animate-float" style={{ animationDelay: "2s", animationDuration: "8s" }}>
+        <div className="absolute bottom-[15%] right-[8%] text-7xl text-purple-300 animate-float will-change-transform hidden lg:block" style={{ animationDelay: "2s", animationDuration: "8s", transform: "translateZ(0)" }}>
           𝄞
         </div>
       </div>

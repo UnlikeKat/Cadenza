@@ -12,24 +12,24 @@ export default function DashboardPage() {
     <div className="min-h-screen cosmic-bg text-white relative overflow-hidden">
       <div className="fixed inset-0 cosmic-grid opacity-40 pointer-events-none" />
 
-      {/* Floating musical notes background */}
+      {/* Floating musical notes background - optimized for performance */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-10">
-        <div className="absolute top-[12%] left-[8%] text-7xl text-purple-400 animate-float" style={{ animationDelay: "0s", animationDuration: "9s" }}>
+        <div className="absolute top-[12%] left-[8%] text-7xl text-purple-400 animate-float will-change-transform" style={{ animationDelay: "0s", animationDuration: "9s", transform: "translateZ(0)" }}>
           ♪
         </div>
-        <div className="absolute top-[25%] right-[15%] text-6xl text-cyan-400 animate-float" style={{ animationDelay: "1.2s", animationDuration: "10s" }}>
+        <div className="absolute top-[25%] right-[15%] text-6xl text-cyan-400 animate-float will-change-transform" style={{ animationDelay: "1.2s", animationDuration: "10s", transform: "translateZ(0)" }}>
           ♫
         </div>
-        <div className="absolute bottom-[20%] left-[12%] text-8xl text-pink-400 animate-float" style={{ animationDelay: "0.6s", animationDuration: "11s" }}>
+        <div className="absolute bottom-[20%] left-[12%] text-8xl text-pink-400 animate-float will-change-transform hidden sm:block" style={{ animationDelay: "0.6s", animationDuration: "11s", transform: "translateZ(0)" }}>
           𝄞
         </div>
-        <div className="absolute top-[45%] right-[18%] text-7xl text-blue-300 animate-float" style={{ animationDelay: "1.8s", animationDuration: "8s" }}>
+        <div className="absolute top-[45%] right-[18%] text-7xl text-blue-300 animate-float will-change-transform hidden md:block" style={{ animationDelay: "1.8s", animationDuration: "8s", transform: "translateZ(0)" }}>
           ♩
         </div>
-        <div className="absolute bottom-[35%] right-[10%] text-6xl text-purple-300 animate-float" style={{ animationDelay: "1s", animationDuration: "12s" }}>
+        <div className="absolute bottom-[35%] right-[10%] text-6xl text-purple-300 animate-float will-change-transform hidden lg:block" style={{ animationDelay: "1s", animationDuration: "12s", transform: "translateZ(0)" }}>
           ♬
         </div>
-        <div className="absolute top-[60%] left-[20%] text-5xl text-cyan-300 animate-float" style={{ animationDelay: "2.2s", animationDuration: "9s" }}>
+        <div className="absolute top-[60%] left-[20%] text-5xl text-cyan-300 animate-float will-change-transform hidden xl:block" style={{ animationDelay: "2.2s", animationDuration: "9s", transform: "translateZ(0)" }}>
           ♭
         </div>
       </div>
