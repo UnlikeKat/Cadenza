@@ -563,6 +563,12 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     try {
       const Tone = await ensureTone();
       
+      // Debug: log what we actually got
+      console.log('Tone module type:', typeof Tone);
+      console.log('Tone keys:', Object.keys(Tone).slice(0, 20));
+      console.log('Tone.start type:', typeof Tone.start);
+      console.log('Has default?', 'default' in Tone);
+      
       // Verify Tone module loaded correctly
       if (!Tone || typeof Tone.start !== 'function') {
         console.error('Tone module not loaded correctly:', Tone);
