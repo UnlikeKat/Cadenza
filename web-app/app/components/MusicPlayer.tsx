@@ -36,8 +36,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const ensureTone = useCallback(async (): Promise<ToneModule> => {
     if (toneModuleRef.current) return toneModuleRef.current;
     const mod = await import('tone');
-    toneModuleRef.current = mod;
-    return mod;
+    // In production builds, named exports might be under 'default'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actualMod = (mod as any).default || mod;
+    toneModuleRef.current = actualMod as ToneModule;
+    return actualMod as ToneModule;
   }, []);
 
   const disposeFxNodes = () => {
