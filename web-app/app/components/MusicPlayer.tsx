@@ -35,10 +35,34 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
   const ensureTone = useCallback(async (): Promise<ToneModule> => {
     if (toneModuleRef.current) return toneModuleRef.current;
+    // Import everything as namespace to handle webpack bundling quirks
     const mod = await import('tone');
-    // In production builds, named exports might be under 'default'
+    // Try multiple patterns to get the actual exports
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const actualMod = (mod as any).default || mod;
+    let actualMod: any = mod;
+    
+    // Pattern 1: Check if exports are under 'default'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((mod as any).default && Object.keys(mod).length === 1) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      actualMod = (mod as any).default;
+    }
+    
+    // Pattern 2: If still empty, try to access via namespace
+    if (Object.keys(actualMod).length === 0) {
+      // Import with explicit namespace
+      actualMod = await import('tone').then(m => m);
+    }
+    
+    // Pattern 3: Direct require as fallback for webpack
+    if (Object.keys(actualMod).length === 0 && typeof window !== 'undefined') {
+      try {
+        actualMod = await import('tone/build/esm/index.js');
+      } catch (e) {
+        console.error('Failed to load Tone with specific path:', e);
+      }
+    }
+    
     toneModuleRef.current = actualMod as ToneModule;
     return actualMod as ToneModule;
   }, []);
