@@ -53,11 +53,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     const unlock = () => {
       void ensureTone()
-        .then(Tone => {
+        .then(({ start, getContext }) => {
           if (cancelled) return;
-          const toneContext = typeof Tone.getContext === 'function' ? Tone.getContext() : Tone.context;
+          const toneContext = getContext();
           if (toneContext && toneContext.state !== 'running') {
-            void Tone.start();
+            void start();
           }
         })
         .catch(() => undefined);
@@ -559,9 +559,28 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     try {
       const Tone = await ensureTone();
+      
+      // Verify Tone module loaded correctly
+      if (!Tone || typeof Tone.start !== 'function') {
+        console.error('Tone module not loaded correctly:', Tone);
+        setError('Audio engine failed to initialize');
+        return;
+      }
+
       await Tone.start();
       const piano = await ensurePiano();
       setError(null);
+
+      // Verify required Tone components
+      if (!Tone.Transport || !Tone.Draw || !Tone.Part) {
+        console.error('Missing Tone components:', { 
+          Transport: !!Tone.Transport, 
+          Draw: !!Tone.Draw, 
+          Part: !!Tone.Part 
+        });
+        setError('Audio components missing');
+        return;
+      }
 
       // Reset transport, visuals, and scheduling before a fresh playback
       Tone.Transport.stop();
