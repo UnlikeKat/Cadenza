@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import verovio from 'verovio';
-import * as Tone from 'tone';
 import { Midi } from '@tonejs/midi';
 import type { Piano as PianoType } from '@tonejs/piano';
+
+type ToneModule = typeof import('tone');
 
 interface MusicPlayerProps {
   musicxml?: string;
@@ -20,32 +21,57 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [showZoomSlider, setShowZoomSlider] = useState(false);
   const [instrumentLoading, setInstrumentLoading] = useState(false);
   const pianoRef = useRef<PianoType | null>(null);
-  const scheduledPartsRef = useRef<Tone.Part[]>([]);
+  const toneModuleRef = useRef<ToneModule | null>(null);
+
+  type TonePartHandle = { start: (time?: number) => void; stop: () => void; dispose: () => void };
+  const scheduledPartsRef = useRef<TonePartHandle[]>([]);
   const verovioRef = useRef<InstanceType<typeof verovio.toolkit> | null>(null);
   const noteElementsRef = useRef<Element[]>([]);
   const fallbackNoteIndexRef = useRef(0);
   const stopTimeoutRef = useRef<number | null>(null);
-  const fxNodesRef = useRef<Tone.ToneAudioNode[]>([]);
+  const fxNodesRef = useRef<Array<{ dispose: () => void }>>([]);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
+  const ensureTone = useCallback(async (): Promise<ToneModule> => {
+    if (toneModuleRef.current) return toneModuleRef.current;
+    const mod = await import('tone');
+    toneModuleRef.current = mod;
+    return mod;
+  }, []);
+
+  const disposeFxNodes = () => {
+    fxNodesRef.current.forEach(node => node.dispose());
+    fxNodesRef.current = [];
+  };
+
   // Ensure the Web Audio context unlocks on the first user gesture
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let cancelled = false;
+
     const unlock = () => {
-      const toneContext = typeof Tone.getContext === 'function' ? Tone.getContext() : Tone.context;
-      if (toneContext && toneContext.state !== 'running') {
-        void Tone.start();
-      }
+      void ensureTone()
+        .then(Tone => {
+          if (cancelled) return;
+          const toneContext = typeof Tone.getContext === 'function' ? Tone.getContext() : Tone.context;
+          if (toneContext && toneContext.state !== 'running') {
+            void Tone.start();
+          }
+        })
+        .catch(() => undefined);
     };
 
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
 
     return () => {
+      cancelled = true;
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, []);
+  }, [ensureTone]);
 
   const HIGHLIGHT_FLAG_ATTR = 'data-verovio-highlighted';
   const PREV_FILL_ATTR = 'data-prev-fill';
@@ -57,108 +83,104 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const PREV_TRANSITION_ATTR = 'data-prev-transition';
   const STYLE_SENTINEL = '__verovio_none__';
 
-    const disposeFxNodes = () => {
-      fxNodesRef.current.forEach(node => node.dispose());
-      fxNodesRef.current = [];
-    };
-
   const ensurePiano = useCallback(async () => {
     if (pianoRef.current) {
       return pianoRef.current;
     }
 
+    if (typeof window === 'undefined') {
+      throw new Error('Audio engine is not available during server rendering');
+    }
+
     setInstrumentLoading(true);
     setError(null);
 
-      if (typeof window === 'undefined') {
-        throw new Error('Audio engine is not available during server rendering');
-      }
+    const Tone = await ensureTone();
+    const { Piano } = await import('@tonejs/piano');
 
-      const { Piano } = await import('@tonejs/piano');
+    const piano = new Piano({
+      velocities: 5,
+      minNote: 21,
+      maxNote: 108,
+      release: true,
+      pedal: true
+    });
 
-      const piano = new Piano({
-        velocities: 5,
-        minNote: 21,
-        maxNote: 108,
-        release: true,
-        pedal: true
-      });
+    piano.volume.value = -4;
 
-      piano.volume.value = -4;
+    const lowCut = new Tone.Filter({
+      type: 'highpass',
+      frequency: 120,
+      Q: 0.7
+    });
 
-      const lowCut = new Tone.Filter({
-        type: 'highpass',
-        frequency: 120,
-        Q: 0.7
-      });
+    const mudReducer = new Tone.Filter({
+      type: 'peaking',
+      frequency: 280,
+      gain: -6,
+      Q: 1.1
+    });
 
-      const mudReducer = new Tone.Filter({
-        type: 'peaking',
-        frequency: 280,
-        gain: -6,
-        Q: 1.1
-      });
+    const presenceBoost = new Tone.Filter({
+      type: 'peaking',
+      frequency: 2600,
+      gain: 4,
+      Q: 0.9
+    });
 
-      const presenceBoost = new Tone.Filter({
-        type: 'peaking',
-        frequency: 2600,
-        gain: 4,
-        Q: 0.9
-      });
+    const airBoost = new Tone.Filter({
+      type: 'highshelf',
+      frequency: 7800,
+      gain: 3
+    });
 
-      const airBoost = new Tone.Filter({
-        type: 'highshelf',
-        frequency: 7800,
-        gain: 3
-      });
+    const stereoWidener = new Tone.StereoWidener(0.35);
 
-      const stereoWidener = new Tone.StereoWidener(0.35);
+    const ambience = new Tone.Reverb({
+      decay: 0.7,
+      wet: 0.04,
+      preDelay: 0.006
+    });
 
-      const ambience = new Tone.Reverb({
-        decay: 0.7,
-        wet: 0.04,
-        preDelay: 0.006
-      });
+    const limiter = new Tone.Limiter(-1.2);
 
-      const limiter = new Tone.Limiter(-1.2);
+    fxNodesRef.current = [
+      lowCut,
+      mudReducer,
+      presenceBoost,
+      airBoost,
+      stereoWidener,
+      ambience,
+      limiter
+    ];
 
-      fxNodesRef.current = [
-        lowCut,
-        mudReducer,
-        presenceBoost,
-        airBoost,
-        stereoWidener,
-        ambience,
-        limiter
-      ];
+    piano.chain(
+      lowCut,
+      mudReducer,
+      presenceBoost,
+      airBoost,
+      stereoWidener,
+      ambience,
+      limiter,
+      Tone.Destination
+    );
 
-      piano.chain(
-        lowCut,
-        mudReducer,
-        presenceBoost,
-        airBoost,
-        stereoWidener,
-        ambience,
-        limiter,
-        Tone.Destination
-      );
+    piano.sync();
 
-      piano.sync();
-
-      try {
-        await piano.load();
-        pianoRef.current = piano;
-        setInstrumentLoading(false);
-        return piano;
-      } catch (err) {
-        console.error('Failed to load piano samples', err);
-        setError('Failed to load piano samples');
-        setInstrumentLoading(false);
-        piano.dispose();
-        disposeFxNodes();
-        throw err;
-      }
-    }, []);
+    try {
+      await piano.load();
+      pianoRef.current = piano;
+      setInstrumentLoading(false);
+      return piano;
+    } catch (err) {
+      console.error('Failed to load piano samples', err);
+      setError('Failed to load piano samples');
+      setInstrumentLoading(false);
+      piano.dispose();
+      disposeFxNodes();
+      throw err;
+    }
+  }, [ensureTone]);
 
   const applyHighlightToElement = (element: Element, collector: Set<Element>) => {
     if (!(element instanceof SVGElement)) {
@@ -418,7 +440,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
   useEffect(() => {
     return () => {
-      if (stopTimeoutRef.current !== null) {
+      if (typeof window !== 'undefined' && stopTimeoutRef.current !== null) {
         window.clearTimeout(stopTimeoutRef.current);
         stopTimeoutRef.current = null;
       }
@@ -429,14 +451,21 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       });
       scheduledPartsRef.current = [];
 
-      Tone.Transport.stop();
-      Tone.Transport.cancel(0);
-      Tone.Draw.cancel();
+      const Tone = toneModuleRef.current;
+      if (Tone) {
+        Tone.Transport.stop();
+        Tone.Transport.cancel(0);
+        Tone.Draw.cancel();
+      }
 
       clearHighlightedNotes();
 
       if (pianoRef.current) {
-        pianoRef.current.releaseAll();
+        if (Tone) {
+          pianoRef.current.releaseAll(Tone.now());
+        } else {
+          pianoRef.current.releaseAll();
+        }
         pianoRef.current.dispose();
         pianoRef.current = null;
       }
@@ -529,6 +558,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     if (instrumentLoading) return;
 
     try {
+      const Tone = await ensureTone();
       await Tone.start();
       const piano = await ensurePiano();
       setError(null);
@@ -592,7 +622,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       midi.tracks.forEach(track => {
         if (track.notes.length === 0) return; // Skip empty tracks
 
-        const part = new Tone.Part((time, note) => {
+        const part = new Tone.Part((time: number, note: { name: string; duration: number; velocity: number }) => {
           // Scale velocity for more dynamic range (0.3 to 1.0 instead of 0 to 1)
           const scaledVelocity = 0.3 + (note.velocity * 0.7);
 
@@ -606,10 +636,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         })));
 
         part.start(0);
-        scheduledPartsRef.current.push(part);
+        scheduledPartsRef.current.push(part as unknown as TonePartHandle);
       });
 
-      const highlightPart = new Tone.Part((time, event: { highlightTime: number }) => {
+      const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
         const noteTime = event.highlightTime;
         Tone.Draw.schedule(() => {
           clearHighlightedNotes();
@@ -624,14 +654,16 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       })));
 
       highlightPart.start(0);
-      scheduledPartsRef.current.push(highlightPart);
+      scheduledPartsRef.current.push(highlightPart as unknown as TonePartHandle);
 
       Tone.Transport.start();
       setIsPlaying(true);
 
-      stopTimeoutRef.current = window.setTimeout(() => {
-        handleStop();
-      }, midi.duration * 1000 + 300);
+      if (typeof window !== 'undefined') {
+        stopTimeoutRef.current = window.setTimeout(() => {
+          handleStop();
+        }, midi.duration * 1000 + 300);
+      }
     } catch (err) {
       console.error('Playback error:', err);
       setError('Failed to play music');
@@ -640,10 +672,13 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   const handleStop = () => {
-    Tone.Transport.stop();
-    Tone.Transport.position = 0;
-    Tone.Transport.cancel(0);
-    Tone.Draw.cancel();
+    const Tone = toneModuleRef.current;
+    if (Tone) {
+      Tone.Transport.stop();
+      Tone.Transport.position = 0;
+      Tone.Transport.cancel(0);
+      Tone.Draw.cancel();
+    }
 
     scheduledPartsRef.current.forEach(part => {
       part.stop();
@@ -651,7 +686,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     });
     scheduledPartsRef.current = [];
 
-    if (stopTimeoutRef.current !== null) {
+    if (typeof window !== 'undefined' && stopTimeoutRef.current !== null) {
       window.clearTimeout(stopTimeoutRef.current);
       stopTimeoutRef.current = null;
     }
@@ -660,7 +695,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     fallbackNoteIndexRef.current = 0;
 
     if (pianoRef.current) {
-      pianoRef.current.releaseAll(Tone.now());
+      if (Tone) {
+        pianoRef.current.releaseAll(Tone.now());
+      } else {
+        pianoRef.current.releaseAll();
+      }
     }
 
     setIsPlaying(false);
