@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import verovio from 'verovio';
 import * as Tone from 'tone';
 import { Midi } from '@tonejs/midi';
-import { Piano } from '@tonejs/piano';
+import type { Piano as PianoType } from '@tonejs/piano';
 
 interface MusicPlayerProps {
   musicxml?: string;
@@ -19,7 +19,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [zoom, setZoom] = useState(35); // Zoom scale (20-100) - lower = more measures per line
   const [showZoomSlider, setShowZoomSlider] = useState(false);
   const [instrumentLoading, setInstrumentLoading] = useState(false);
-  const pianoRef = useRef<Piano | null>(null);
+  const pianoRef = useRef<PianoType | null>(null);
   const scheduledPartsRef = useRef<Tone.Part[]>([]);
   const verovioRef = useRef<InstanceType<typeof verovio.toolkit> | null>(null);
   const noteElementsRef = useRef<Element[]>([]);
@@ -69,6 +69,12 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     setInstrumentLoading(true);
     setError(null);
+
+      if (typeof window === 'undefined') {
+        throw new Error('Audio engine is not available during server rendering');
+      }
+
+      const { Piano } = await import('@tonejs/piano');
 
       const piano = new Piano({
         velocities: 5,
