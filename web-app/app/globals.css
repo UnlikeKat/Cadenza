@@ -444,8 +444,8 @@
     will-change: transform, filter !important;
   }
 
-  :global([class*="notehead"]),
-  :global([class*="note"]) {
+  [class*="notehead"],
+  [class*="note"] {
     transition: fill 0.08s ease-in-out, transform 0.08s ease-in-out;
   }
 }
