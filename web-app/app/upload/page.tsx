@@ -2,9 +2,14 @@
 
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
-import MusicPlayer from '@/app/components/MusicPlayer';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+const MusicPlayer = dynamic(() => import('@/app/components/MusicPlayer'), {
+  ssr: false,
+  loading: () => <div className="text-center py-8">Loading player...</div>
+});
 
 export default function UploadPage() {
   const { data: session } = useSession();

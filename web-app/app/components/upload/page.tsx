@@ -1,7 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import MusicPlayer from '@/app/components/MusicPlayer';
+import dynamic from 'next/dynamic';
+
+const MusicPlayer = dynamic(() => import('@/app/components/MusicPlayer'), {
+  ssr: false,
+  loading: () => <div className="text-center py-8">Loading player...</div>
+});
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
