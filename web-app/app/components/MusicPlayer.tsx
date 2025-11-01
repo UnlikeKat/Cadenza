@@ -59,16 +59,6 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     };
   }, []);
 
-  const HIGHLIGHT_FLAG_ATTR = 'data-verovio-highlighted';
-  const PREV_FILL_ATTR = 'data-prev-fill';
-  const PREV_STROKE_ATTR = 'data-prev-stroke';
-  const PREV_STROKE_WIDTH_ATTR = 'data-prev-stroke-width';
-  const PREV_STYLE_ATTR = 'data-prev-style';
-  const PREV_TRANSFORM_ATTR = 'data-prev-transform';
-  const PREV_TRANSFORM_ORIGIN_ATTR = 'data-prev-transform-origin';
-  const PREV_TRANSITION_ATTR = 'data-prev-transition';
-  const STYLE_SENTINEL = '__verovio_none__';
-
   const ensureSampler = useCallback(async () => {
     if (samplerRef.current) {
       return samplerRef.current;
@@ -135,123 +125,16 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     }
   }, []);
 
+  // Not used anymore - we use a vertical line indicator instead
   const applyHighlightToElement = (element: Element, collector: Set<Element>) => {
-    if (!(element instanceof SVGElement)) {
-      return;
-    }
-
-    if (!element.hasAttribute(HIGHLIGHT_FLAG_ATTR)) {
-      element.setAttribute(HIGHLIGHT_FLAG_ATTR, 'true');
-
-      const prevFill = element.getAttribute('fill');
-      element.setAttribute(PREV_FILL_ATTR, prevFill ?? STYLE_SENTINEL);
-
-      const prevStroke = element.getAttribute('stroke');
-      element.setAttribute(PREV_STROKE_ATTR, prevStroke ?? STYLE_SENTINEL);
-
-      const prevStrokeWidth = element.getAttribute('stroke-width');
-      element.setAttribute(PREV_STROKE_WIDTH_ATTR, prevStrokeWidth ?? STYLE_SENTINEL);
-
-      const prevStyle = element.getAttribute('style');
-      element.setAttribute(PREV_STYLE_ATTR, prevStyle ?? STYLE_SENTINEL);
-
-      const prevTransform = element.style.transform;
-      element.setAttribute(PREV_TRANSFORM_ATTR, prevTransform || STYLE_SENTINEL);
-
-      const prevTransformOrigin = element.style.transformOrigin;
-      element.setAttribute(PREV_TRANSFORM_ORIGIN_ATTR, prevTransformOrigin || STYLE_SENTINEL);
-
-      const prevTransition = element.style.transition;
-      element.setAttribute(PREV_TRANSITION_ATTR, prevTransition || STYLE_SENTINEL);
-    }
-
-    element.setAttribute('fill', '#a78bfa');
-    element.setAttribute('stroke', '#8b5cf6');
-    element.setAttribute('stroke-width', '2.4');
-
-    const mergedStyle = element.getAttribute('style') || '';
-    const stylesToInject = [
-      'filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.85))',
-      'opacity: 1',
-      'will-change: transform, filter',
-    ];
-    const styleSet = new Set(
-      mergedStyle
-        .split(';')
-        .map(part => part.trim())
-        .filter(Boolean)
-    );
-    stylesToInject.forEach(rule => styleSet.add(rule));
-    element.setAttribute('style', Array.from(styleSet).join('; '));
-
-    element.style.transform = 'scale(1.18)';
-    element.style.transformOrigin = 'center';
-    element.style.transition = 'transform 0.08s ease-out';
-
-    element.classList.add('playing-note-active');
-
     collector.add(element);
   };
 
   const clearHighlightedNotes = () => {
-    if (overlayRef.current) {
-      overlayRef.current.style.opacity = '0';
-    }
-
-    if (!containerRef.current) return;
-    const highlighted = containerRef.current.querySelectorAll(`[${HIGHLIGHT_FLAG_ATTR}="true"]`);
-    highlighted.forEach(el => {
-      if (el instanceof SVGElement) {
-        const prevFill = el.getAttribute(PREV_FILL_ATTR);
-        if (prevFill === STYLE_SENTINEL || prevFill === null) {
-          el.removeAttribute('fill');
-        } else {
-          el.setAttribute('fill', prevFill);
-        }
-
-        const prevStroke = el.getAttribute(PREV_STROKE_ATTR);
-        if (prevStroke === STYLE_SENTINEL || prevStroke === null) {
-          el.removeAttribute('stroke');
-        } else {
-          el.setAttribute('stroke', prevStroke);
-        }
-
-        const prevStrokeWidth = el.getAttribute(PREV_STROKE_WIDTH_ATTR);
-        if (prevStrokeWidth === STYLE_SENTINEL || prevStrokeWidth === null) {
-          el.removeAttribute('stroke-width');
-        } else {
-          el.setAttribute('stroke-width', prevStrokeWidth);
-        }
-
-        const prevStyle = el.getAttribute(PREV_STYLE_ATTR);
-        if (prevStyle === STYLE_SENTINEL || prevStyle === null) {
-          el.removeAttribute('style');
-        } else {
-          el.setAttribute('style', prevStyle);
-        }
-
-        const prevTransform = el.getAttribute(PREV_TRANSFORM_ATTR);
-        el.style.transform = prevTransform && prevTransform !== STYLE_SENTINEL ? prevTransform : '';
-
-        const prevTransformOrigin = el.getAttribute(PREV_TRANSFORM_ORIGIN_ATTR);
-        el.style.transformOrigin = prevTransformOrigin && prevTransformOrigin !== STYLE_SENTINEL ? prevTransformOrigin : '';
-
-        const prevTransition = el.getAttribute(PREV_TRANSITION_ATTR);
-        el.style.transition = prevTransition && prevTransition !== STYLE_SENTINEL ? prevTransition : '';
-      }
-
-      el.removeAttribute(HIGHLIGHT_FLAG_ATTR);
-      el.removeAttribute(PREV_FILL_ATTR);
-      el.removeAttribute(PREV_STROKE_ATTR);
-      el.removeAttribute(PREV_STROKE_WIDTH_ATTR);
-      el.removeAttribute(PREV_STYLE_ATTR);
-      el.removeAttribute(PREV_TRANSFORM_ATTR);
-      el.removeAttribute(PREV_TRANSFORM_ORIGIN_ATTR);
-      el.removeAttribute(PREV_TRANSITION_ATTR);
-      el.classList.remove('playing-note-active');
-    });
+    // Not needed anymore - vertical line indicator doesn't modify notes
   };
 
+  // Update the vertical line position based on note position
   const updateOverlayPosition = (elements: Element[]) => {
     const overlay = overlayRef.current;
     const wrapper = wrapperRef.current;
@@ -273,27 +156,29 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       return;
     }
 
+    // Calculate the center X position of the notes
     const minLeft = Math.min(...rects.map(r => r.left));
     const maxRight = Math.max(...rects.map(r => r.right));
+    const centerX = (minLeft + maxRight) / 2;
+    
+    // Position a thin vertical line at the center
+    const lineWidth = 3;
+    const wrapperHeight = wrapper.scrollHeight || wrapperRect.height;
+    const leftPos = centerX - wrapperRect.left - lineWidth / 2;
+    const clampedLeft = Math.max(0, Math.min(leftPos, wrapperRect.width - lineWidth));
 
-    const padX = 8;
-  const width = Math.min(48, Math.max(14, maxRight - minLeft + padX * 2));
-  const centerX = (minLeft + maxRight) / 2;
-  const wrapperHeight = wrapper.scrollHeight || wrapperRect.height;
-  const rawLeft = centerX - wrapperRect.left - width / 2;
-  const clampedLeft = Math.min(Math.max(0, rawLeft), Math.max(0, wrapperRect.width - width));
-
-  overlay.style.left = `${clampedLeft}px`;
+    overlay.style.left = `${clampedLeft}px`;
     overlay.style.top = '0px';
-    overlay.style.width = `${width}px`;
+    overlay.style.width = `${lineWidth}px`;
     overlay.style.height = `${wrapperHeight}px`;
     overlay.style.opacity = '1';
   };
 
+  // Smooth scroll to keep the playback line visible without jumping
   const scrollHighlightedIntoView = (elements: Element[]) => {
     if (elements.length === 0) return;
 
-    const scrollHost = wrapperRef.current?.parentElement ?? containerRef.current?.parentElement;
+    const scrollHost = wrapperRef.current?.parentElement;
     if (!scrollHost) return;
 
     const target = elements[0];
@@ -303,8 +188,16 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     const noteRect = target.getBoundingClientRect();
     const containerRect = scrollHost.getBoundingClientRect();
+    
+    // Only scroll if note is significantly outside the visible area
+    // This prevents constant jumping
+    const topMargin = containerRect.height * 0.2;
+    const bottomMargin = containerRect.height * 0.2;
+    
+    const isAboveView = noteRect.top < (containerRect.top + topMargin);
+    const isBelowView = noteRect.bottom > (containerRect.bottom - bottomMargin);
 
-    if (noteRect.top < containerRect.top + 80 || noteRect.bottom > containerRect.bottom - 80) {
+    if (isAboveView || isBelowView) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     }
   };
@@ -585,7 +478,6 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
         const noteTime = event.highlightTime;
         Tone.getDraw().schedule(() => {
-          clearHighlightedNotes();
           const highlighted = highlightUsingVerovio(noteTime);
           const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
           updateOverlayPosition(toHandle);
@@ -631,53 +523,37 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       stopTimeoutRef.current = null;
     }
 
-    clearHighlightedNotes();
     fallbackNoteIndexRef.current = 0;
 
     if (samplerRef.current) {
       samplerRef.current.releaseAll(Tone.now());
     }
+    
+    // Hide the playback line
+    if (overlayRef.current) {
+      overlayRef.current.style.opacity = '0';
+    }
 
     setIsPlaying(false);
   };
 
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      // Pause
+      Tone.getTransport().pause();
+      setIsPlaying(false);
+    } else if (Tone.getTransport().state === 'paused') {
+      // Resume from pause
+      Tone.getTransport().start();
+      setIsPlaying(true);
+    } else {
+      // Start from beginning
+      void handlePlay();
+    }
+  };
+
   return (
     <div className="bg-purple-900/30 rounded-lg p-4 sm:p-6 border border-purple-400/30">
-      {/* Controls */}
-      <div className="mb-4 sm:mb-6 flex gap-2 sm:gap-4 flex-wrap items-center">
-        <button
-          onClick={handlePlay}
-          disabled={isPlaying || loading || instrumentLoading}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-purple-900/50 px-4 sm:px-6 py-2 rounded-lg font-semibold transition-colors"
-          title={instrumentLoading ? 'Loading piano...' : isPlaying ? 'Playing...' : 'Play'}
-        >
-          {instrumentLoading ? '⏳' : isPlaying ? '⏸️' : '▶️'}
-          <span className="hidden sm:inline ml-2">
-            {instrumentLoading ? 'Loading...' : isPlaying ? 'Playing...' : 'Play'}
-          </span>
-        </button>
-        
-        <button
-          onClick={handleStop}
-          disabled={!isPlaying}
-          className="bg-red-600 hover:bg-red-700 disabled:bg-purple-900/50 px-4 sm:px-6 py-2 rounded-lg font-semibold transition-colors"
-          title="Stop"
-        >
-          ⏹️
-          <span className="hidden sm:inline ml-2">Stop</span>
-        </button>
-
-        {/* Zoom Controls */}
-        <button
-          onClick={() => setShowZoomSlider(!showZoomSlider)}
-          className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center gap-2"
-          title="Adjust Zoom"
-        >
-          🔍
-          <span className="hidden sm:inline">Zoom</span>
-        </button>
-      </div>
-
       {/* Zoom Slider */}
       {showZoomSlider && (
         <div className="mb-4 sm:mb-6 bg-purple-900/50 rounded-lg p-3 sm:p-4 border border-purple-400/30">
@@ -719,27 +595,76 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         </div>
       )}
 
-      {/* Sheet Music Display */}
-      <div className="bg-white rounded-lg p-4 overflow-y-auto overflow-x-hidden border-2 border-purple-400/50 max-h-[80vh] touch-pan-y">
-        {loading && (
-          <div className="text-center text-purple-600 py-8">
-            Loading music notation...
+      {/* Sheet Music Display - scrollbar hidden but scrollable */}
+      <div className="bg-white rounded-lg p-4 border-2 border-purple-400/50 max-h-[80vh] relative overflow-hidden">
+        <div 
+          className="overflow-y-auto overflow-x-hidden h-full scrollbar-hide touch-pan-y"
+          style={{
+            scrollbarWidth: 'none', /* Firefox */
+            msOverflowStyle: 'none', /* IE and Edge */
+          }}
+        >
+          {loading && (
+            <div className="text-center text-purple-600 py-8">
+              Loading music notation...
+            </div>
+          )}
+          
+          {error && (
+            <div className="text-center text-red-500 py-8">
+              {error}
+            </div>
+          )}
+          
+          <div ref={wrapperRef} className="relative w-full min-h-[200px]">
+            <div ref={containerRef} className="w-full min-h-[200px]" />
+            {/* Vertical playback line indicator */}
+            <div
+              ref={overlayRef}
+              className="pointer-events-none absolute top-0 left-0 bg-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.8)] opacity-0 transition-opacity duration-100 ease-out"
+              style={{ width: 0, height: 0 }}
+            />
           </div>
-        )}
-        
-        {error && (
-          <div className="text-center text-red-500 py-8">
-            {error}
+        </div>
+
+        {/* Floating Control Overlay - Always visible at bottom center */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+          <div className="bg-purple-900/80 backdrop-blur-sm rounded-full px-4 py-2 border border-purple-400/50 shadow-lg flex items-center gap-3">
+            {/* Play/Pause Button */}
+            <button
+              onClick={handlePlayPause}
+              disabled={loading || instrumentLoading}
+              className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900/50 disabled:cursor-not-allowed transition-colors"
+              title={instrumentLoading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}
+            >
+              {instrumentLoading ? (
+                <span className="text-white text-xl">⏳</span>
+              ) : isPlaying ? (
+                <span className="text-white text-xl">⏸️</span>
+              ) : (
+                <span className="text-white text-xl">▶️</span>
+              )}
+            </button>
+            
+            {/* Stop Button */}
+            <button
+              onClick={handleStop}
+              disabled={!isPlaying && Tone.getTransport().state !== 'paused'}
+              className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900/50 disabled:cursor-not-allowed transition-colors"
+              title="Stop"
+            >
+              <span className="text-white text-xl">⏹️</span>
+            </button>
+
+            {/* Zoom Button */}
+            <button
+              onClick={() => setShowZoomSlider(!showZoomSlider)}
+              className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 transition-colors"
+              title="Adjust Zoom"
+            >
+              <span className="text-white text-xl">🔍</span>
+            </button>
           </div>
-        )}
-        
-        <div ref={wrapperRef} className="relative w-full min-h-[200px]">
-          <div ref={containerRef} className="w-full min-h-[200px]" />
-          <div
-            ref={overlayRef}
-            className="pointer-events-none absolute top-0 left-0 rounded-full bg-purple-400/20 ring-1 ring-purple-500/40 shadow-[0_0_22px_rgba(167,139,250,0.45)] opacity-0 transition-all duration-75 ease-out mix-blend-screen"
-            style={{ width: 0, height: 0 }}
-          />
         </div>
       </div>
 
@@ -756,6 +681,13 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         </a>
         {' '}(LGPL 3.0)
       </div>
+
+      {/* CSS for hiding scrollbar */}
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 }
