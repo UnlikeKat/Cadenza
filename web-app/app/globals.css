@@ -431,16 +431,17 @@
     animation-delay: 0.3s;
   }
 
-  /* Note highlighting during playback */
-  :global(.playing-note) {
+  /* Note highlighting during playback - targets ALL SVG elements */
+  .playing-note-active {
     fill: #a78bfa !important;
     stroke: #c084fc !important;
-    stroke-width: 2 !important;
+    stroke-width: 3px !important;
     opacity: 1 !important;
     filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.9)) !important;
     transition: all 0.08s ease-in-out !important;
-    transform: scale(1.15);
-    transform-origin: center;
+    transform: scale(1.2) !important;
+    transform-origin: center !important;
+    will-change: transform, filter !important;
   }
 
   :global([class*="notehead"]),
