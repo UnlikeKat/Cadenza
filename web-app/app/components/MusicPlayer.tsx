@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import verovio from 'verovio';
 import { Midi } from '@tonejs/midi';
-import type { Piano as PianoType } from '@tonejs/piano';
-
-type ToneModule = typeof import('tone');
+import * as Tone from 'tone';
 
 interface MusicPlayerProps {
   musicxml?: string;
@@ -20,56 +18,22 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [zoom, setZoom] = useState(35); // Zoom scale (20-100) - lower = more measures per line
   const [showZoomSlider, setShowZoomSlider] = useState(false);
   const [instrumentLoading, setInstrumentLoading] = useState(false);
-  const pianoRef = useRef<PianoType | null>(null);
-  const toneModuleRef = useRef<ToneModule | null>(null);
+  const samplerRef = useRef<Tone.Sampler | null>(null);
 
-  type TonePartHandle = { start: (time?: number) => void; stop: () => void; dispose: () => void };
+  type TonePartHandle = Tone.Part;
   const scheduledPartsRef = useRef<TonePartHandle[]>([]);
   const verovioRef = useRef<InstanceType<typeof verovio.toolkit> | null>(null);
   const noteElementsRef = useRef<Element[]>([]);
   const fallbackNoteIndexRef = useRef(0);
   const stopTimeoutRef = useRef<number | null>(null);
-  const fxNodesRef = useRef<Array<{ dispose: () => void }>>([]);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const ensureTone = useCallback(async (): Promise<ToneModule> => {
-    if (toneModuleRef.current) return toneModuleRef.current;
-    // Import everything as namespace to handle webpack bundling quirks
-    const mod = await import('tone');
-    // Try multiple patterns to get the actual exports
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let actualMod: any = mod;
-    
-    // Pattern 1: Check if exports are under 'default'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((mod as any).default && Object.keys(mod).length === 1) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actualMod = (mod as any).default;
-    }
-    
-    // Pattern 2: If still empty, try to access via namespace
-    if (Object.keys(actualMod).length === 0) {
-      // Import with explicit namespace
-      actualMod = await import('tone').then(m => m);
-    }
-    
-    // Pattern 3: Direct require as fallback for webpack
-    if (Object.keys(actualMod).length === 0 && typeof window !== 'undefined') {
-      try {
-        actualMod = await import('tone/build/esm/index.js');
-      } catch (e) {
-        console.error('Failed to load Tone with specific path:', e);
-      }
-    }
-    
-    toneModuleRef.current = actualMod as ToneModule;
-    return actualMod as ToneModule;
-  }, []);
-
   const disposeFxNodes = () => {
-    fxNodesRef.current.forEach(node => node.dispose());
-    fxNodesRef.current = [];
+    if (samplerRef.current) {
+      samplerRef.current.dispose();
+      samplerRef.current = null;
+    }
   };
 
   // Ensure the Web Audio context unlocks on the first user gesture
@@ -78,16 +42,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     let cancelled = false;
 
-    const unlock = () => {
-      void ensureTone()
-        .then(({ start, getContext }) => {
-          if (cancelled) return;
-          const toneContext = getContext();
-          if (toneContext && toneContext.state !== 'running') {
-            void start();
-          }
-        })
-        .catch(() => undefined);
+    const unlock = async () => {
+      if (cancelled) return;
+      if (Tone.context.state !== 'running') {
+        await Tone.start();
+      }
     };
 
     window.addEventListener('pointerdown', unlock, { once: true });
@@ -98,7 +57,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, [ensureTone]);
+  }, []);
 
   const HIGHLIGHT_FLAG_ATTR = 'data-verovio-highlighted';
   const PREV_FILL_ATTR = 'data-prev-fill';
@@ -110,9 +69,9 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const PREV_TRANSITION_ATTR = 'data-prev-transition';
   const STYLE_SENTINEL = '__verovio_none__';
 
-  const ensurePiano = useCallback(async () => {
-    if (pianoRef.current) {
-      return pianoRef.current;
+  const ensureSampler = useCallback(async () => {
+    if (samplerRef.current) {
+      return samplerRef.current;
     }
 
     if (typeof window === 'undefined') {
@@ -122,92 +81,59 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     setInstrumentLoading(true);
     setError(null);
 
-    const Tone = await ensureTone();
-    const { Piano } = await import('@tonejs/piano');
-
-    const piano = new Piano({
-      velocities: 5,
-      minNote: 21,
-      maxNote: 108,
-      release: true,
-      pedal: true
-    });
-
-    piano.volume.value = -4;
-
-    const lowCut = new Tone.Filter({
-      type: 'highpass',
-      frequency: 120,
-      Q: 0.7
-    });
-
-    const mudReducer = new Tone.Filter({
-      type: 'peaking',
-      frequency: 280,
-      gain: -6,
-      Q: 1.1
-    });
-
-    const presenceBoost = new Tone.Filter({
-      type: 'peaking',
-      frequency: 2600,
-      gain: 4,
-      Q: 0.9
-    });
-
-    const airBoost = new Tone.Filter({
-      type: 'highshelf',
-      frequency: 7800,
-      gain: 3
-    });
-
-    const stereoWidener = new Tone.StereoWidener(0.35);
-
-    const ambience = new Tone.Reverb({
-      decay: 0.7,
-      wet: 0.04,
-      preDelay: 0.006
-    });
-
-    const limiter = new Tone.Limiter(-1.2);
-
-    fxNodesRef.current = [
-      lowCut,
-      mudReducer,
-      presenceBoost,
-      airBoost,
-      stereoWidener,
-      ambience,
-      limiter
-    ];
-
-    piano.chain(
-      lowCut,
-      mudReducer,
-      presenceBoost,
-      airBoost,
-      stereoWidener,
-      ambience,
-      limiter,
-      Tone.Destination
-    );
-
-    piano.sync();
-
     try {
-      await piano.load();
-      pianoRef.current = piano;
+      // Create a high-quality piano sampler with Salamander Grand Piano samples
+      // Using a subset of notes for faster loading while maintaining quality
+      const sampler = new Tone.Sampler({
+        urls: {
+          A0: "A0.mp3",
+          C1: "C1.mp3",
+          "D#1": "Ds1.mp3",
+          "F#1": "Fs1.mp3",
+          A1: "A1.mp3",
+          C2: "C2.mp3",
+          "D#2": "Ds2.mp3",
+          "F#2": "Fs2.mp3",
+          A2: "A2.mp3",
+          C3: "C3.mp3",
+          "D#3": "Ds3.mp3",
+          "F#3": "Fs3.mp3",
+          A3: "A3.mp3",
+          C4: "C4.mp3",
+          "D#4": "Ds4.mp3",
+          "F#4": "Fs4.mp3",
+          A4: "A4.mp3",
+          C5: "C5.mp3",
+          "D#5": "Ds5.mp3",
+          "F#5": "Fs5.mp3",
+          A5: "A5.mp3",
+          C6: "C6.mp3",
+          "D#6": "Ds6.mp3",
+          "F#6": "Fs6.mp3",
+          A6: "A6.mp3",
+          C7: "C7.mp3",
+          "D#7": "Ds7.mp3",
+          "F#7": "Fs7.mp3",
+          A7: "A7.mp3",
+          C8: "C8.mp3"
+        },
+        release: 1,
+        baseUrl: "https://tonejs.github.io/audio/salamander/"
+      }).toDestination();
+
+      sampler.volume.value = -8;
+
+      await Tone.loaded();
+      samplerRef.current = sampler;
       setInstrumentLoading(false);
-      return piano;
+      return sampler;
     } catch (err) {
       console.error('Failed to load piano samples', err);
       setError('Failed to load piano samples');
       setInstrumentLoading(false);
-      piano.dispose();
-      disposeFxNodes();
       throw err;
     }
-  }, [ensureTone]);
+  }, []);
 
   const applyHighlightToElement = (element: Element, collector: Set<Element>) => {
     if (!(element instanceof SVGElement)) {
@@ -478,23 +404,14 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       });
       scheduledPartsRef.current = [];
 
-      const Tone = toneModuleRef.current;
-      if (Tone) {
-        Tone.Transport.stop();
-        Tone.Transport.cancel(0);
-        Tone.Draw.cancel();
-      }
+      Tone.getTransport().stop();
+      Tone.getTransport().cancel(0);
+      Tone.getDraw().cancel();
 
       clearHighlightedNotes();
 
-      if (pianoRef.current) {
-        if (Tone) {
-          pianoRef.current.releaseAll(Tone.now());
-        } else {
-          pianoRef.current.releaseAll();
-        }
-        pianoRef.current.dispose();
-        pianoRef.current = null;
+      if (samplerRef.current) {
+        samplerRef.current.releaseAll();
       }
 
       disposeFxNodes();
@@ -585,41 +502,15 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     if (instrumentLoading) return;
 
     try {
-      const Tone = await ensureTone();
-      
-      // Debug: log what we actually got
-      console.log('Tone module type:', typeof Tone);
-      console.log('Tone keys:', Object.keys(Tone).slice(0, 20));
-      console.log('Tone.start type:', typeof Tone.start);
-      console.log('Has default?', 'default' in Tone);
-      
-      // Verify Tone module loaded correctly
-      if (!Tone || typeof Tone.start !== 'function') {
-        console.error('Tone module not loaded correctly:', Tone);
-        setError('Audio engine failed to initialize');
-        return;
-      }
-
       await Tone.start();
-      const piano = await ensurePiano();
+      const sampler = await ensureSampler();
       setError(null);
 
-      // Verify required Tone components
-      if (!Tone.Transport || !Tone.Draw || !Tone.Part) {
-        console.error('Missing Tone components:', { 
-          Transport: !!Tone.Transport, 
-          Draw: !!Tone.Draw, 
-          Part: !!Tone.Part 
-        });
-        setError('Audio components missing');
-        return;
-      }
-
       // Reset transport, visuals, and scheduling before a fresh playback
-      Tone.Transport.stop();
-      Tone.Transport.cancel(0);
-      Tone.Draw.cancel();
-      Tone.Transport.position = 0;
+      Tone.getTransport().stop();
+      Tone.getTransport().cancel(0);
+      Tone.getDraw().cancel();
+      Tone.getTransport().position = 0;
 
       clearHighlightedNotes();
 
@@ -678,8 +569,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           // Scale velocity for more dynamic range (0.3 to 1.0 instead of 0 to 1)
           const scaledVelocity = 0.3 + (note.velocity * 0.7);
 
-          piano.keyDown({ note: note.name, time, velocity: scaledVelocity });
-          piano.keyUp({ note: note.name, time: time + note.duration });
+          // Play note with Sampler - triggerAttackRelease(note, duration, time, velocity)
+          sampler.triggerAttackRelease(note.name, note.duration, time, scaledVelocity);
         }, track.notes.map(note => ({
           time: note.time,
           name: note.name,
@@ -693,7 +584,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
       const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
         const noteTime = event.highlightTime;
-        Tone.Draw.schedule(() => {
+        Tone.getDraw().schedule(() => {
           clearHighlightedNotes();
           const highlighted = highlightUsingVerovio(noteTime);
           const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
@@ -708,7 +599,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       highlightPart.start(0);
       scheduledPartsRef.current.push(highlightPart as unknown as TonePartHandle);
 
-      Tone.Transport.start();
+      Tone.getTransport().start();
       setIsPlaying(true);
 
       if (typeof window !== 'undefined') {
@@ -724,13 +615,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   const handleStop = () => {
-    const Tone = toneModuleRef.current;
-    if (Tone) {
-      Tone.Transport.stop();
-      Tone.Transport.position = 0;
-      Tone.Transport.cancel(0);
-      Tone.Draw.cancel();
-    }
+    Tone.getTransport().stop();
+    Tone.getTransport().position = 0;
+    Tone.getTransport().cancel(0);
+    Tone.getDraw().cancel();
 
     scheduledPartsRef.current.forEach(part => {
       part.stop();
@@ -746,12 +634,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     clearHighlightedNotes();
     fallbackNoteIndexRef.current = 0;
 
-    if (pianoRef.current) {
-      if (Tone) {
-        pianoRef.current.releaseAll(Tone.now());
-      } else {
-        pianoRef.current.releaseAll();
-      }
+    if (samplerRef.current) {
+      samplerRef.current.releaseAll(Tone.now());
     }
 
     setIsPlaying(false);
