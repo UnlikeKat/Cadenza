@@ -125,13 +125,17 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     }
   }, []);
 
-  // Not used anymore - we use a vertical line indicator instead
+  // Not used anymore - we use CSS classes for highlighting
   const applyHighlightToElement = (element: Element, collector: Set<Element>) => {
     collector.add(element);
   };
 
   const clearHighlightedNotes = () => {
-    // Not needed anymore - vertical line indicator doesn't modify notes
+    if (!containerRef.current) return;
+    
+    // Remove 'playing' class from all currently playing notes
+    const playingNotes = containerRef.current.querySelectorAll('g.note.playing');
+    playingNotes.forEach(note => note.classList.remove('playing'));
   };
 
   // Update the vertical line position based on note position
@@ -190,15 +194,20 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     const containerRect = scrollHost.getBoundingClientRect();
     
     // Only scroll if note is significantly outside the visible area
-    // This prevents constant jumping
-    const topMargin = containerRect.height * 0.2;
-    const bottomMargin = containerRect.height * 0.2;
+    // Use larger margins to prevent constant micro-scrolling
+    const topMargin = containerRect.height * 0.3;
+    const bottomMargin = containerRect.height * 0.3;
     
     const isAboveView = noteRect.top < (containerRect.top + topMargin);
     const isBelowView = noteRect.bottom > (containerRect.bottom - bottomMargin);
 
+    // Only scroll when really necessary
     if (isAboveView || isBelowView) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      // Scroll to center, but only if significantly out of view
+      scrollHost.scrollTo({
+        top: scrollHost.scrollTop + (noteRect.top - containerRect.top - containerRect.height / 2),
+        behavior: 'smooth'
+      });
     }
   };
 
@@ -207,48 +216,37 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     try {
       const toolkit = verovioRef.current as unknown as {
-        getElementsAtTime?: (time: number) => Record<string, string[] | undefined>;
+        getElementsAtTime?: (time: number) => { 
+          page?: number; 
+          notes?: string[];
+          rests?: string[];
+        };
       };
 
       if (!toolkit.getElementsAtTime) return [];
 
+      // Convert seconds to milliseconds as per Verovio documentation
       const timeInMs = Math.max(0, Math.round(timeSeconds * 1000));
       const elementsAtTime = toolkit.getElementsAtTime(timeInMs);
 
-      if (!elementsAtTime) return [];
+      if (!elementsAtTime || !elementsAtTime.notes) return [];
 
-      const primaryIds = [
-        ...(elementsAtTime.note ?? []),
-        ...(elementsAtTime.chord ?? []),
-        ...(elementsAtTime['note-chord'] ?? []),
-      ].filter((id): id is string => typeof id === 'string');
+      const highlightedElements: Element[] = [];
 
-      const ids = primaryIds.length > 0
-        ? primaryIds
-        : Object.values(elementsAtTime)
-            .flat()
-            .filter((id): id is string => typeof id === 'string');
+      // Highlight notes by adding CSS class
+      for (const noteId of elementsAtTime.notes) {
+        const safeId = typeof CSS !== 'undefined' && CSS.escape 
+          ? CSS.escape(noteId) 
+          : noteId.replace(/([:\[\].#])/g, '\\$1');
+        const noteElement = containerRef.current.querySelector(`[id="${safeId}"]`);
+        
+        if (noteElement) {
+          noteElement.classList.add('playing');
+          highlightedElements.push(noteElement);
+        }
+      }
 
-      if (ids.length === 0) return [];
-
-      const highlightedSet = new Set<Element>();
-
-      ids
-        .map(id => {
-          const safeId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/([:\[\].#])/g, '\\$1');
-          return containerRef.current!.querySelector(`[id="${safeId}"]`);
-        })
-        .filter((el): el is Element => !!el)
-        .forEach(el => {
-          applyHighlightToElement(el, highlightedSet);
-
-          if (el instanceof SVGGElement) {
-            const childShapes = el.querySelectorAll('use, path, ellipse, circle');
-            childShapes.forEach(child => applyHighlightToElement(child, highlightedSet));
-          }
-        });
-
-      return Array.from(highlightedSet);
+      return highlightedElements;
     } catch (err) {
       console.warn('Verovio highlighting failed', err);
       return [];
@@ -478,9 +476,17 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
         const noteTime = event.highlightTime;
         Tone.getDraw().schedule(() => {
+          // Clear previous highlights
+          clearHighlightedNotes();
+          
+          // Highlight current notes
           const highlighted = highlightUsingVerovio(noteTime);
           const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
+          
+          // Update vertical line position
           updateOverlayPosition(toHandle);
+          
+          // Scroll if needed (less aggressive)
           scrollHighlightedIntoView(toHandle);
         }, time);
       }, uniqueTimes.map(highlightTime => ({
@@ -528,6 +534,9 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     if (samplerRef.current) {
       samplerRef.current.releaseAll(Tone.now());
     }
+    
+    // Clear all note highlights
+    clearHighlightedNotes();
     
     // Hide the playback line
     if (overlayRef.current) {
@@ -682,10 +691,21 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         {' '}(LGPL 3.0)
       </div>
 
-      {/* CSS for hiding scrollbar */}
+      {/* CSS for hiding scrollbar and note highlighting */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
+        }
+        
+        /* Verovio note highlighting - official pattern */
+        :global(g.note.playing) {
+          fill: #a78bfa !important;
+        }
+        
+        :global(g.note.playing path),
+        :global(g.note.playing ellipse),
+        :global(g.note.playing use) {
+          fill: #a78bfa !important;
         }
       `}</style>
     </div>
