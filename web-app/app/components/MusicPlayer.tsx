@@ -113,7 +113,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         const osmd = new OSMD(containerRef.current, {
           autoResize: true,
           backend: BT.SVG,
-          drawingParameters: 'default',
+          drawingParameters: 'compacttight',
         });
 
         osmdRef.current = osmd;
@@ -261,10 +261,19 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         const osmd = osmdRef.current;
         if (!osmd) throw new Error('OSMD not initialized');
 
-        // Load and render
-        await osmd.load(xmlToLoad);
-        osmd.zoom = zoom;
-        await osmd.render();
+        // Load and render - wrap in try-catch to provide better error handling
+        try {
+          await osmd.load(xmlToLoad);
+          osmd.zoom = zoom;
+          await osmd.render();
+        } catch (loadError) {
+          console.error('OSMD load/render error:', loadError);
+          // Try to provide more context about the error
+          if (loadError instanceof Error && loadError.message.includes('TempoInBpm')) {
+            throw new Error('Failed to load music: The score appears to be missing tempo information in one or more parts. This is a known issue with OSMD Extended. Please ensure your MusicXML file has tempo markings in all parts.');
+          }
+          throw loadError;
+        }
 
         // Initialize playback if available
         if (window.opensheetmusicdisplay?.PlaybackManager) {
