@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { convertMusicXmlForOsmd } from '@/lib/musicxml';
 
 interface MusicPlayerProps {
   musicxml?: string;
@@ -164,135 +165,101 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           PlaybackManager?: unknown;
         };
         
-        // Trim and validate MusicXML string
-        const trimmedXml = musicxml.trim();
-        
-        // Check if XML starts with <?xml declaration, if not, add it
-        let xmlToLoad = trimmedXml;
-        if (!trimmedXml.startsWith('<?xml')) {
-          // Some MusicXML files might not have the XML declaration
-          // Try to find the root element
-          const rootMatch = trimmedXml.match(/<(\w+:)?score-partwise|<(\w+:)?score-timewise/);
-          if (rootMatch) {
-            // Add XML declaration if missing
-            xmlToLoad = '<?xml version="1.0" encoding="UTF-8"?>\n' + trimmedXml;
-            console.log('Added XML declaration to MusicXML');
-          } else {
-            console.warn('MusicXML does not start with <?xml and no root element found');
-            console.log('First 200 chars:', trimmedXml.substring(0, 200));
-            // Still try to load it, OSMD might handle it
-          }
-        }
-        
-        // Convert MusicXML 4.0 to 3.1 to avoid OSMD compatibility issues
-        if (xmlToLoad.includes('version="4.0"') || xmlToLoad.includes("version='4.0'")) {
-          console.log('Converting MusicXML 4.0 to 3.1 format for OSMD compatibility');
-          // Replace version attribute
-          xmlToLoad = xmlToLoad.replace(/version=["']4\.0["']/g, 'version="3.1"');
-          // Replace DOCTYPE to point to 3.1 DTD
-          xmlToLoad = xmlToLoad.replace(
-            /<!DOCTYPE\s+score-partwise\s+PUBLIC\s+"-//Recordare//DTD\s+MusicXML\s+4\.0\s+Partwise\/\/EN"\s+"[^"]*">/g,
-            '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">'
-          );
-          xmlToLoad = xmlToLoad.replace(
-            /<!DOCTYPE\s+score-timewise\s+PUBLIC\s+"-//Recordare//DTD\s+MusicXML\s+4\.0\s+Timewise\/\/EN"\s+"[^"]*">/g,
-            '<!DOCTYPE score-timewise PUBLIC "-//Recordare//DTD MusicXML 3.1 Timewise//EN" "http://www.musicxml.org/dtds/timewise.dtd">'
-          );
-          console.log('Converted MusicXML version to 3.1');
-        }
-        
-        // Validate that we have a valid MusicXML root element
-        if (!xmlToLoad.includes('score-partwise') && !xmlToLoad.includes('score-timewise')) {
-          throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
-        }
-        
-        // Ensure first measure has proper tempo information for OSMD
-        // OSMD requires tempo in the first measure to avoid TempoInBpm undefined errors
-        const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
-        if (firstMeasureMatch) {
-          const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
-          const measureContent = xmlToLoad.substring(measureIndex);
-          
-          // Check if first measure already has direction with sound tempo
-          const hasDirectionInFirstMeasure = measureContent.match(/<\/measure>/) && 
-            measureContent.substring(0, measureContent.indexOf('</measure>')).includes('<direction');
-          
-          // Check if it has sound tempo specifically
-          const hasSoundTempo = xmlToLoad.includes('<sound tempo=');
-          
-          // Always ensure first measure has both metronome and sound tempo for OSMD compatibility
-          if (!hasDirectionInFirstMeasure || !hasSoundTempo) {
-            console.log('Ensuring first measure has proper tempo information for OSMD compatibility');
-            // Find where to insert (after measure tag, before any existing content)
-            let insertIndex = measureIndex;
-            // Skip any whitespace/newlines after measure tag
-            while (insertIndex < xmlToLoad.length && /\s/.test(xmlToLoad[insertIndex])) {
-              insertIndex++;
+        try {
+          if (osmdRef.current && musicxml) {
+            const trimmedXml = musicxml.trim();
+            let xmlToLoad = trimmedXml;
+
+            if (!trimmedXml.startsWith('<?xml')) {
+              const rootMatch = trimmedXml.match(/<(\w+:)?score-partwise|<(\w+:)?score-timewise/);
+              if (rootMatch) {
+                xmlToLoad = '<?xml version="1.0" encoding="UTF-8"?>\n' + trimmedXml;
+                console.log('Added XML declaration to MusicXML');
+              } else {
+                throw new Error('Invalid MusicXML: could not find a root score-partwise or score-timewise element.');
+              }
+            }
+
+            // Convert MusicXML 4.0 to 3.1 if needed
+            xmlToLoad = convertMusicXmlForOsmd(xmlToLoad);
+
+            if (!xmlToLoad.includes('score-partwise') && !xmlToLoad.includes('score-timewise')) {
+              throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
             }
             
-            const tempoInjection = `  <direction placement="above">
-    <direction-type>
-      <metronome>
-        <beat-unit>quarter</beat-unit>
-        <per-minute>120</per-minute>
-      </metronome>
-    </direction-type>
-    <sound tempo="120"/>
-  </direction>
-`;
-            xmlToLoad = xmlToLoad.slice(0, insertIndex) + tempoInjection + xmlToLoad.slice(insertIndex);
-            console.log('Injected tempo information (120 BPM) into first measure');
+            console.log('Loading MusicXML, length:', xmlToLoad.length);
+            console.log('First 1000 chars:', xmlToLoad.substring(0, 1000));
+            
+            // Load MusicXML with error handling
+            try {
+              await osmd.load(xmlToLoad);
+            } catch (loadError: unknown) {
+              const errorMsg = loadError instanceof Error ? loadError.message : String(loadError);
+              console.error('OSMD load failed:', errorMsg);
+              
+              // This is a known issue with OSMD extended version and MusicXML 4.0 files
+              // The TemposCalculator has a bug where it tries to access TempoInBpm on undefined objects
+              if (errorMsg.includes('TempoInBpm') || errorMsg.includes('incomplete')) {
+                throw new Error(
+                  'OSMD compatibility issue: This MusicXML file (version 4.0 from MuseScore) appears to have a compatibility issue with the OSMD extended library. ' +
+                  'The error occurs during tempo calculation. This may be a bug in OSMD\'s TemposCalculator. ' +
+                  'Please try exporting the file as MusicXML 3.1 or 3.0, or contact the OSMD extended repository maintainers.'
+                );
+              }
+              throw loadError;
+            }
+            
+            // Render the sheet music first
+            await osmd.render();
+            
+            // Initialize playback if sheet is loaded (after render)
+            if (osmd.Sheet && playbackManagerRef.current && timingSourceRef.current) {
+              const playbackManager = playbackManagerRef.current as {
+                initialize: (manager: unknown) => void;
+                addListener: (cursor: unknown) => void;
+                reset: () => void;
+              };
+              const timingSource = timingSourceRef.current as {
+                reset: () => void;
+                pause: () => void;
+                Settings: unknown;
+              };
+              
+              timingSource.reset();
+              timingSource.pause();
+              timingSource.Settings = osmd.Sheet.playbackSettings;
+              playbackManager.initialize(osmd.Sheet.musicPartManager);
+              if (osmd.cursor) {
+                playbackManager.addListener(osmd.cursor);
+              }
+              playbackManager.reset();
+              
+              osmd.PlaybackManager = playbackManager;
+            }
           }
-        }
-        
-        console.log('Loading MusicXML, length:', xmlToLoad.length);
-        console.log('First 1000 chars:', xmlToLoad.substring(0, 1000));
-        
-        // Load MusicXML with error handling
-        try {
-          await osmd.load(xmlToLoad);
-        } catch (loadError: unknown) {
-          const errorMsg = loadError instanceof Error ? loadError.message : String(loadError);
-          console.error('OSMD load failed:', errorMsg);
+        } catch (err: unknown) {
+          console.error('Failed to render music', err);
+          let errorMessage = 'Failed to render music notation';
           
-          // This is a known issue with OSMD extended version and MusicXML 4.0 files
-          // The TemposCalculator has a bug where it tries to access TempoInBpm on undefined objects
-          if (errorMsg.includes('TempoInBpm') || errorMsg.includes('incomplete')) {
-            throw new Error(
-              'OSMD compatibility issue: This MusicXML file (version 4.0 from MuseScore) appears to have a compatibility issue with the OSMD extended library. ' +
-              'The error occurs during tempo calculation. This may be a bug in OSMD\'s TemposCalculator. ' +
-              'Please try exporting the file as MusicXML 3.1 or 3.0, or contact the OSMD extended repository maintainers.'
-            );
+          if (err instanceof Error) {
+            errorMessage = err.message;
+            
+            // Provide specific error messages for known issues
+            if (err.message.includes('TempoInBpm') || err.message.includes('OSMD compatibility')) {
+              errorMessage = err.message; // Use the detailed message we set
+            } else if (err.message.includes('incomplete') || err.message.includes('could not be loaded')) {
+              errorMessage = 'The MusicXML file could not be loaded. This may be due to:\n' +
+                'Ã¢â‚¬Â¢ Compatibility issues with MusicXML 4.0\n' +
+                'Ã¢â‚¬Â¢ Missing or invalid tempo information\n' +
+                'Ã¢â‚¬Â¢ A bug in the OSMD library\n\n' +
+                'Try exporting your file as MusicXML 3.1 or 3.0 format.';
+            } else if (err.message.includes('duration is not valid')) {
+              errorMessage = 'Invalid duration found in MusicXML. The file may be corrupted or use unsupported features.';
+            }
           }
-          throw loadError;
-        }
-        
-        // Render the sheet music first
-        await osmd.render();
-        
-        // Initialize playback if sheet is loaded (after render)
-        if (osmd.Sheet && playbackManagerRef.current && timingSourceRef.current) {
-          const playbackManager = playbackManagerRef.current as {
-            initialize: (manager: unknown) => void;
-            addListener: (cursor: unknown) => void;
-            reset: () => void;
-          };
-          const timingSource = timingSourceRef.current as {
-            reset: () => void;
-            pause: () => void;
-            Settings: unknown;
-          };
           
-          timingSource.reset();
-          timingSource.pause();
-          timingSource.Settings = osmd.Sheet.playbackSettings;
-          playbackManager.initialize(osmd.Sheet.musicPartManager);
-          if (osmd.cursor) {
-            playbackManager.addListener(osmd.cursor);
-          }
-          playbackManager.reset();
-          
-          osmd.PlaybackManager = playbackManager;
+          setError(errorMessage);
+          setLoading(false);
         }
 
         setLoading(false);
