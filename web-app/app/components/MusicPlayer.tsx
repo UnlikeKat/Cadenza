@@ -180,9 +180,35 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
               }
             }
 
-            // Convert MusicXML 4.0 to 3.1 if needed
+            // Convert MusicXML 4.0 to 3.1 for OSMD compatibility
             xmlToLoad = convertMusicXmlForOsmd(xmlToLoad);
 
+            // Ensure first measure has proper tempo information for OSMD
+            // OSMD requires tempo in the first measure to avoid TempoInBpm undefined errors
+            const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
+            if (firstMeasureMatch) {
+              const firstMeasureContentMatch = xmlToLoad.match(/<measure[^>]*>([\s\S]*?)<\/measure>/);
+              if (firstMeasureContentMatch) {
+                const firstMeasureContent = firstMeasureContentMatch[1];
+                if (!firstMeasureContent.includes('<direction')) {
+                  // No direction found, inject a default tempo
+                  const defaultTempo = `
+  <direction placement="above">
+    <direction-type>
+      <metronome>
+        <beat-unit>quarter</beat-unit>
+        <per-minute>120</per-minute>
+      </metronome>
+    </direction-type>
+    <sound tempo="120"/>
+  </direction>`;
+                  xmlToLoad = xmlToLoad.replace(firstMeasureMatch[0], firstMeasureMatch[0] + defaultTempo);
+                  console.log('Injected default tempo into the first measure for OSMD compatibility.');
+                }
+              }
+            }
+
+            // Final validation before loading
             if (!xmlToLoad.includes('score-partwise') && !xmlToLoad.includes('score-timewise')) {
               throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
             }
