@@ -189,20 +189,31 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
         }
         
-        // Check if MusicXML has tempo information - OSMD requires it
-        const hasTempoInfo = xmlToLoad.includes('<sound tempo=') || 
-                            xmlToLoad.includes('<metronome>') || 
-                            xmlToLoad.includes('<per-minute>') ||
-                            xmlToLoad.includes('tempo=');
-        
-        if (!hasTempoInfo) {
-          console.log('MusicXML appears to be missing tempo information, attempting to inject default tempo');
-          // Find the first measure and inject a default tempo
-          const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
-          if (firstMeasureMatch) {
-            const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
-            const tempoInjection = `
-  <direction>
+        // Ensure first measure has proper tempo information for OSMD
+        // OSMD requires tempo in the first measure to avoid TempoInBpm undefined errors
+        const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
+        if (firstMeasureMatch) {
+          const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
+          const measureContent = xmlToLoad.substring(measureIndex);
+          
+          // Check if first measure already has direction with sound tempo
+          const hasDirectionInFirstMeasure = measureContent.match(/<\/measure>/) && 
+            measureContent.substring(0, measureContent.indexOf('</measure>')).includes('<direction');
+          
+          // Check if it has sound tempo specifically
+          const hasSoundTempo = xmlToLoad.includes('<sound tempo=');
+          
+          // Always ensure first measure has both metronome and sound tempo for OSMD compatibility
+          if (!hasDirectionInFirstMeasure || !hasSoundTempo) {
+            console.log('Ensuring first measure has proper tempo information for OSMD compatibility');
+            // Find where to insert (after measure tag, before any existing content)
+            let insertIndex = measureIndex;
+            // Skip any whitespace/newlines after measure tag
+            while (insertIndex < xmlToLoad.length && /\s/.test(xmlToLoad[insertIndex])) {
+              insertIndex++;
+            }
+            
+            const tempoInjection = `  <direction placement="above">
     <direction-type>
       <metronome>
         <beat-unit>quarter</beat-unit>
@@ -210,17 +221,50 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
       </metronome>
     </direction-type>
     <sound tempo="120"/>
-  </direction>`;
-            xmlToLoad = xmlToLoad.slice(0, measureIndex) + tempoInjection + xmlToLoad.slice(measureIndex);
-            console.log('Injected default tempo (120 BPM) into first measure');
+  </direction>
+`;
+            xmlToLoad = xmlToLoad.slice(0, insertIndex) + tempoInjection + xmlToLoad.slice(insertIndex);
+            console.log('Injected tempo information (120 BPM) into first measure');
           }
         }
         
         console.log('Loading MusicXML, length:', xmlToLoad.length);
-        console.log('First 500 chars:', xmlToLoad.substring(0, 500));
+        console.log('First 1000 chars:', xmlToLoad.substring(0, 1000));
         
-        // Load MusicXML
-        await osmd.load(xmlToLoad);
+        // Load MusicXML with error handling
+        try {
+          await osmd.load(xmlToLoad);
+        } catch (loadError: unknown) {
+          const errorMsg = loadError instanceof Error ? loadError.message : String(loadError);
+          console.error('OSMD load failed:', errorMsg);
+          
+          // If it's a tempo-related error, try one more time with a simpler tempo structure
+          if (errorMsg.includes('TempoInBpm') || errorMsg.includes('incomplete')) {
+            console.log('Attempting alternative tempo injection method');
+            // Try a more minimal tempo structure
+            if (firstMeasureMatch) {
+              const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
+              let insertIndex = measureIndex;
+              while (insertIndex < xmlToLoad.length && /\s/.test(xmlToLoad[insertIndex])) {
+                insertIndex++;
+              }
+              
+              // Remove any previous tempo injection attempts
+              const cleanedXml = xmlToLoad.replace(/<direction[^>]*>[\s\S]*?<\/direction>\s*/g, '');
+              
+              // Add minimal tempo
+              const minimalTempo = `<direction><sound tempo="120"/></direction>`;
+              const finalXml = cleanedXml.slice(0, insertIndex) + minimalTempo + cleanedXml.slice(insertIndex);
+              
+              console.log('Retrying with minimal tempo structure');
+              await osmd.load(finalXml);
+            } else {
+              throw loadError;
+            }
+          } else {
+            throw loadError;
+          }
+        }
         
         // Render the sheet music first
         await osmd.render();
