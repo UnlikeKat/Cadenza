@@ -184,6 +184,23 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           }
         }
         
+        // Convert MusicXML 4.0 to 3.1 to avoid OSMD compatibility issues
+        if (xmlToLoad.includes('version="4.0"') || xmlToLoad.includes("version='4.0'")) {
+          console.log('Converting MusicXML 4.0 to 3.1 format for OSMD compatibility');
+          // Replace version attribute
+          xmlToLoad = xmlToLoad.replace(/version=["']4\.0["']/g, 'version="3.1"');
+          // Replace DOCTYPE to point to 3.1 DTD
+          xmlToLoad = xmlToLoad.replace(
+            /<!DOCTYPE\s+score-partwise\s+PUBLIC\s+"-//Recordare//DTD\s+MusicXML\s+4\.0\s+Partwise\/\/EN"\s+"[^"]*">/g,
+            '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">'
+          );
+          xmlToLoad = xmlToLoad.replace(
+            /<!DOCTYPE\s+score-timewise\s+PUBLIC\s+"-//Recordare//DTD\s+MusicXML\s+4\.0\s+Timewise\/\/EN"\s+"[^"]*">/g,
+            '<!DOCTYPE score-timewise PUBLIC "-//Recordare//DTD MusicXML 3.1 Timewise//EN" "http://www.musicxml.org/dtds/timewise.dtd">'
+          );
+          console.log('Converted MusicXML version to 3.1');
+        }
+        
         // Validate that we have a valid MusicXML root element
         if (!xmlToLoad.includes('score-partwise') && !xmlToLoad.includes('score-timewise')) {
           throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
