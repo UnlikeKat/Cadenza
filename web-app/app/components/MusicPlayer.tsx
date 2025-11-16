@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 
@@ -308,9 +308,9 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
             errorMessage = err.message; // Use the detailed message we set
           } else if (err.message.includes('incomplete') || err.message.includes('could not be loaded')) {
             errorMessage = 'The MusicXML file could not be loaded. This may be due to:\n' +
-              'â€¢ Compatibility issues with MusicXML 4.0\n' +
-              'â€¢ Missing or invalid tempo information\n' +
-              'â€¢ A bug in the OSMD library\n\n' +
+              'Ã¢â‚¬Â¢ Compatibility issues with MusicXML 4.0\n' +
+              'Ã¢â‚¬Â¢ Missing or invalid tempo information\n' +
+              'Ã¢â‚¬Â¢ A bug in the OSMD library\n\n' +
               'Try exporting your file as MusicXML 3.1 or 3.0 format.';
           } else if (err.message.includes('duration is not valid')) {
             errorMessage = 'Invalid duration found in MusicXML. The file may be corrupted or use unsupported features.';
@@ -405,7 +405,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
               title={isPlaying ? 'Pause' : 'Play'}
             >
               <span className="text-white text-xl">
-                {isPlaying ? 'â¸ï¸' : 'â–¶ï¸'}
+                {isPlaying ? 'Ã¢ÂÂ¸Ã¯Â¸Â' : 'Ã¢â€“Â¶Ã¯Â¸Â'}
               </span>
             </button>
             
@@ -415,7 +415,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
               className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900/50 disabled:cursor-not-allowed transition-colors"
               title="Stop"
             >
-              <span className="text-white text-xl">â¹ï¸</span>
+              <span className="text-white text-xl">Ã¢ÂÂ¹Ã¯Â¸Â</span>
             </button>
           </div>
         </div>
