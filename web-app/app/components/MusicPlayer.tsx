@@ -154,55 +154,63 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         // Convert MusicXML 4.0 to 3.1
         xmlToLoad = convertMusicXmlForOsmd(xmlToLoad);
 
-        // Inject tempo if needed - OSMD Extended requires this in the FIRST measure
-        // Look for the first <measure> tag in ANY part
-        const allMeasuresMatch = xmlToLoad.match(/<measure\b[^>]*>/g);
-        if (allMeasuresMatch && allMeasuresMatch.length > 0) {
-          // Find the first measure tag and its content
-          const firstMeasureTag = allMeasuresMatch[0];
-          const firstMeasureIndex = xmlToLoad.indexOf(firstMeasureTag);
-          const firstMeasureEndIndex = xmlToLoad.indexOf('</measure>', firstMeasureIndex);
+        // Inject tempo if needed - OSMD Extended requires this in the FIRST measure of the FIRST part
+        // Find the first <part> element, then find its first <measure>
+        const firstPartMatch = xmlToLoad.match(/<part[^>]*>/);
+        if (firstPartMatch) {
+          const firstPartStartIndex = xmlToLoad.indexOf(firstPartMatch[0]);
+          const firstPartEndIndex = xmlToLoad.indexOf('</part>', firstPartStartIndex);
           
-          if (firstMeasureEndIndex > firstMeasureIndex) {
-            const firstMeasureContent = xmlToLoad.substring(
-              firstMeasureIndex + firstMeasureTag.length,
-              firstMeasureEndIndex
-            );
+          if (firstPartEndIndex > firstPartStartIndex) {
+            const partContent = xmlToLoad.substring(firstPartStartIndex, firstPartEndIndex);
             
-            // Check if this measure already has complete tempo information
-            const hasSoundTempo = /<sound\b[^>]*tempo=["'][^"']+["']/.test(firstMeasureContent);
-            const hasMetronome = /<metronome\b/.test(firstMeasureContent);
-            const hasDirection = /<direction\b/.test(firstMeasureContent);
-            
-            console.log('Tempo check:', { hasSoundTempo, hasMetronome, hasDirection });
-            
-            // If missing any tempo elements, inject a complete tempo directive
-            if (!hasSoundTempo || !hasMetronome) {
-              // Find the position right after the opening measure tag
-              // Insert after any <attributes> tag if present, otherwise at the start
-              const attributesMatch = firstMeasureContent.match(/<attributes\b[\s\S]*?<\/attributes>/);
-              let insertPosition = firstMeasureIndex + firstMeasureTag.length;
+            // Now find the first measure within this part
+            const firstMeasureMatch = partContent.match(/<measure\b[^>]*>/);
+            if (firstMeasureMatch) {
+              const measureStartInPart = partContent.indexOf(firstMeasureMatch[0]);
+              const measureEndInPart = partContent.indexOf('</measure>', measureStartInPart);
               
-              if (attributesMatch) {
-                // Insert after attributes
-                insertPosition = xmlToLoad.indexOf(attributesMatch[0], firstMeasureIndex) + attributesMatch[0].length;
+              if (measureEndInPart > measureStartInPart) {
+                const measureContent = partContent.substring(
+                  measureStartInPart + firstMeasureMatch[0].length,
+                  measureEndInPart
+                );
+                
+                // Check if THIS specific measure has tempo
+                const hasSoundTempo = /<sound\b[^>]*tempo=["'][^"']+["']/.test(measureContent);
+                const hasMetronome = /<metronome\b/.test(measureContent);
+                
+                console.log('First measure tempo check:', { hasSoundTempo, hasMetronome });
+                
+                // If this first measure doesn't have tempo, inject it
+                if (!hasSoundTempo || !hasMetronome) {
+                  // Find where to insert - after <attributes> if present
+                  const attributesMatch = measureContent.match(/<attributes\b[\s\S]*?<\/attributes>/);
+                  let insertPositionInMeasure = firstMeasureMatch[0].length;
+                  
+                  if (attributesMatch) {
+                    insertPositionInMeasure = measureContent.indexOf(attributesMatch[0]) + attributesMatch[0].length;
+                  }
+                  
+                  const absoluteInsertPosition = firstPartStartIndex + measureStartInPart + insertPositionInMeasure;
+                  
+                  const defaultTempo = `
+        <direction placement="above">
+          <direction-type>
+            <metronome parentheses="no">
+              <beat-unit>quarter</beat-unit>
+              <per-minute>120</per-minute>
+            </metronome>
+          </direction-type>
+          <sound tempo="120"/>
+        </direction>`;
+                  
+                  xmlToLoad = xmlToLoad.substring(0, absoluteInsertPosition) + defaultTempo + xmlToLoad.substring(absoluteInsertPosition);
+                  console.log('Injected default tempo (120 BPM) into first measure of first part');
+                } else {
+                  console.log('Tempo already present in first measure of first part');
+                }
               }
-              
-              const defaultTempo = `
-      <direction placement="above">
-        <direction-type>
-          <metronome parentheses="no">
-            <beat-unit>quarter</beat-unit>
-            <per-minute>120</per-minute>
-          </metronome>
-        </direction-type>
-        <sound tempo="120"/>
-      </direction>`;
-              
-              xmlToLoad = xmlToLoad.substring(0, insertPosition) + defaultTempo + xmlToLoad.substring(insertPosition);
-              console.log('Injected default tempo (120 BPM) after position:', insertPosition);
-            } else {
-              console.log('Tempo already present in first measure');
             }
           }
         }
