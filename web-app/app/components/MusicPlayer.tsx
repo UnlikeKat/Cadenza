@@ -2,54 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-// Import OSMD from source - using dynamic imports to handle potential build issues
-let OpenSheetMusicDisplay: any;
-let PlaybackManager: any;
-let LinearTimingSource: any;
-let BasicAudioPlayer: any;
-let BackendType: any;
-
-// Try to load OSMD modules
-if (typeof window !== 'undefined') {
-  try {
-    // Dynamic import from OSMD source
-    import('@osmd/OpenSheetMusicDisplay/OpenSheetMusicDisplay').then(module => {
-      OpenSheetMusicDisplay = module.OpenSheetMusicDisplay;
-    }).catch(() => {
-      console.warn('Could not load OpenSheetMusicDisplay from source');
-    });
-    
-    import('@osmd/Playback').then(module => {
-      PlaybackManager = module.PlaybackManager;
-      LinearTimingSource = module.LinearTimingSource;
-      BasicAudioPlayer = module.BasicAudioPlayer;
-    }).catch(() => {
-      console.warn('Could not load Playback modules from source');
-    });
-    
-    import('@osmd/OpenSheetMusicDisplay/OSMDOptions').then(module => {
-      BackendType = module.BackendType;
-    }).catch(() => {
-      console.warn('Could not load OSMDOptions from source');
-    });
-  } catch (err) {
-    console.warn('OSMD modules not available', err);
-  }
-}
-
 interface MusicPlayerProps {
   musicxml?: string;
   midiFile?: File;
 }
 
-export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
+export default function MusicPlayer({ musicxml, midiFile: _midiFile }: MusicPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const osmdRef = useRef<any>(null);
-  const playbackManagerRef = useRef<any>(null);
-  const timingSourceRef = useRef<any>(null);
+  const osmdRef = useRef<unknown>(null);
+  const playbackManagerRef = useRef<unknown>(null);
+  const timingSourceRef = useRef<unknown>(null);
   const [osmdReady, setOsmdReady] = useState(false);
 
   // Load OSMD dynamically
@@ -102,9 +67,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         setOsmdReady(true);
 
         setLoading(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to load OSMD', err);
-        setError(err.message || 'Failed to load music display library. Please ensure OSMD is built in osmd-extended-master folder.');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load music display library. Please ensure OSMD is built in osmd-extended-master folder.';
+        setError(errorMessage);
         setLoading(false);
       }
     };
@@ -121,21 +87,40 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         setLoading(true);
         setError(null);
 
-        const osmd = osmdRef.current;
+        const osmd = osmdRef.current as {
+          load: (xml: string) => Promise<void>;
+          render: () => Promise<void>;
+          Sheet?: {
+            playbackSettings: unknown;
+            musicPartManager: unknown;
+          };
+          cursor?: unknown;
+          PlaybackManager?: unknown;
+        };
         
         // Load MusicXML
         await osmd.load(musicxml);
         
         // Initialize playback if sheet is loaded
         if (osmd.Sheet && playbackManagerRef.current && timingSourceRef.current) {
-          const playbackManager = playbackManagerRef.current;
-          const timingSource = timingSourceRef.current;
+          const playbackManager = playbackManagerRef.current as {
+            initialize: (manager: unknown) => void;
+            addListener: (cursor: unknown) => void;
+            reset: () => void;
+          };
+          const timingSource = timingSourceRef.current as {
+            reset: () => void;
+            pause: () => void;
+            Settings: unknown;
+          };
           
           timingSource.reset();
           timingSource.pause();
           timingSource.Settings = osmd.Sheet.playbackSettings;
           playbackManager.initialize(osmd.Sheet.musicPartManager);
-          playbackManager.addListener(osmd.cursor);
+          if (osmd.cursor) {
+            playbackManager.addListener(osmd.cursor);
+          }
           playbackManager.reset();
           
           osmd.PlaybackManager = playbackManager;
@@ -145,9 +130,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         await osmd.render();
 
         setLoading(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to render music', err);
-        setError(err.message || 'Failed to render music notation');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to render music notation';
+        setError(errorMessage);
         setLoading(false);
       }
     };
@@ -158,7 +144,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const handlePlay = async () => {
     if (playbackManagerRef.current) {
       try {
-        await playbackManagerRef.current.play();
+        const playbackManager = playbackManagerRef.current as {
+          play: () => Promise<void>;
+        };
+        await playbackManager.play();
         setIsPlaying(true);
       } catch (err) {
         console.error('Playback error', err);
@@ -170,7 +159,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const handlePause = async () => {
     if (playbackManagerRef.current) {
       try {
-        await playbackManagerRef.current.pause();
+        const playbackManager = playbackManagerRef.current as {
+          pause: () => Promise<void>;
+        };
+        await playbackManager.pause();
         setIsPlaying(false);
       } catch (err) {
         console.error('Pause error', err);
@@ -181,7 +173,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const handleStop = () => {
     if (playbackManagerRef.current) {
       try {
-        playbackManagerRef.current.reset();
+        const playbackManager = playbackManagerRef.current as {
+          reset: () => void;
+        };
+        playbackManager.reset();
         setIsPlaying(false);
       } catch (err) {
         console.error('Stop error', err);
