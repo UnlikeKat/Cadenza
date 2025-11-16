@@ -183,8 +183,32 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
                 console.log('First measure tempo check:', { hasSoundTempo, hasMetronome });
                 console.log('First measure content (first 1000 chars):', measureContent.substring(0, 1000));
                 
-                // If this first measure doesn't have tempo, inject it
-                if (!hasSoundTempo && !hasMetronome) {
+                // OSMD Extended needs BOTH metronome AND sound tempo attribute
+                // If metronome exists but sound tempo doesn't, we need to add sound tempo
+                if (hasMetronome && !hasSoundTempo) {
+                  // Find the <direction> tag that contains the metronome and add sound tempo to it
+                  const directionMatch = measureContent.match(/<direction\b[^>]*>[\s\S]*?<\/direction>/);
+                  if (directionMatch) {
+                    const directionIndex = measureContent.indexOf(directionMatch[0]);
+                    const absoluteDirectionIndex = firstPartStartIndex + measureStartInPart + firstMeasureMatch[0].length + directionIndex;
+                    
+                    // Extract the BPM from the metronome if possible
+                    const bpmMatch = measureContent.match(/<per-minute>(\d+)<\/per-minute>/);
+                    const bpm = bpmMatch ? bpmMatch[1] : '120';
+                    
+                    // Add sound tempo right before the closing </direction> tag
+                    const directionEndTag = '</direction>';
+                    const directionEndIndex = directionMatch[0].lastIndexOf(directionEndTag);
+                    const soundTempo = `\n          <sound tempo="${bpm}"/>`;
+                    
+                    const updatedDirection = directionMatch[0].substring(0, directionEndIndex) + soundTempo + '\n        ' + directionEndTag;
+                    
+                    xmlToLoad = xmlToLoad.substring(0, absoluteDirectionIndex) + updatedDirection + xmlToLoad.substring(absoluteDirectionIndex + directionMatch[0].length);
+                    console.log(`Added sound tempo="${bpm}" to existing metronome direction`);
+                  }
+                }
+                // If this first measure doesn't have tempo at all, inject it
+                else if (!hasSoundTempo && !hasMetronome) {
                   // Find where to insert - after <attributes> if present
                   const attributesMatch = measureContent.match(/<attributes\b[\s\S]*?<\/attributes>/);
                   let insertPositionInMeasure = firstMeasureMatch[0].length;
