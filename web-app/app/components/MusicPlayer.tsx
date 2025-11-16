@@ -189,6 +189,33 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
         }
         
+        // Check if MusicXML has tempo information - OSMD requires it
+        const hasTempoInfo = xmlToLoad.includes('<sound tempo=') || 
+                            xmlToLoad.includes('<metronome>') || 
+                            xmlToLoad.includes('<per-minute>') ||
+                            xmlToLoad.includes('tempo=');
+        
+        if (!hasTempoInfo) {
+          console.log('MusicXML appears to be missing tempo information, attempting to inject default tempo');
+          // Find the first measure and inject a default tempo
+          const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
+          if (firstMeasureMatch) {
+            const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
+            const tempoInjection = `
+  <direction>
+    <direction-type>
+      <metronome>
+        <beat-unit>quarter</beat-unit>
+        <per-minute>120</per-minute>
+      </metronome>
+    </direction-type>
+    <sound tempo="120"/>
+  </direction>`;
+            xmlToLoad = xmlToLoad.slice(0, measureIndex) + tempoInjection + xmlToLoad.slice(measureIndex);
+            console.log('Injected default tempo (120 BPM) into first measure');
+          }
+        }
+        
         console.log('Loading MusicXML, length:', xmlToLoad.length);
         console.log('First 500 chars:', xmlToLoad.substring(0, 500));
         
