@@ -16,7 +16,6 @@ import {AbstractExpression} from "../VoiceData/Expressions/AbstractExpression";
 import log from "loglevel";
 import { MusicSheet } from "../MusicSheet";
 import { PlaybackSettings } from "../../Common/DataObjects/PlaybackSettings";
-import { Note } from "../VoiceData";
 
 export class MusicPartManagerIterator {
     constructor(musicSheet: MusicSheet, startTimestamp?: Fraction, endTimestamp?: Fraction) {
@@ -670,15 +669,23 @@ export class MusicPartManagerIterator {
         }
     }
     private getAudibleEntries(entry: VoiceEntry, audibleEntries: VoiceEntry[]): void {
-        // is it a tied note?
+        // Check if this entry should be audible
+        // For ties: only play the start note of a tie, skip continuation notes
+        // However, in a chord, some notes might be tied while others are new
+
         if (entry.hasTie()) {
-            // ignore all tied notes that are no start notes:
-            // check on the first note:
-            const note: Note = entry.Notes[0];
-            if (note.NoteTie !== undefined &&
-                note.NoteTie.StartNote !== note) {
-                // ignore the whole voice entry,
-                // as anyway all notes should be tied in a voice:
+            // Check if ALL notes are tie continuations (not start notes)
+            let allNotesTiedContinuations: boolean = true;
+            for (const note of entry.Notes) {
+                if (!note.NoteTie || note.NoteTie.StartNote === note) {
+                    // This note is either not tied, or is the start of a tie
+                    allNotesTiedContinuations = false;
+                    break;
+                }
+            }
+
+            // Only skip this entry if ALL notes are tie continuations
+            if (allNotesTiedContinuations) {
                 return;
             }
         }
