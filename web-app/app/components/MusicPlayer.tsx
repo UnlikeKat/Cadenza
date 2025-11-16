@@ -114,6 +114,8 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           autoResize: true,
           backend: BT.SVG,
           drawingParameters: 'default',
+          pageFormat: 'Endless', // Single continuous page to prevent awkward measure breaks
+          renderSingleHorizontalStaffline: false,
         });
 
         osmdRef.current = osmd;
