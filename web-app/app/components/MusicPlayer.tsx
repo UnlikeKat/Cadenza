@@ -176,11 +176,21 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           if (rootMatch) {
             // Add XML declaration if missing
             xmlToLoad = '<?xml version="1.0" encoding="UTF-8"?>\n' + trimmedXml;
+            console.log('Added XML declaration to MusicXML');
           } else {
             console.warn('MusicXML does not start with <?xml and no root element found');
             console.log('First 200 chars:', trimmedXml.substring(0, 200));
+            // Still try to load it, OSMD might handle it
           }
         }
+        
+        // Validate that we have a valid MusicXML root element
+        if (!xmlToLoad.includes('score-partwise') && !xmlToLoad.includes('score-timewise')) {
+          throw new Error('Invalid MusicXML: file must contain a score-partwise or score-timewise root element');
+        }
+        
+        console.log('Loading MusicXML, length:', xmlToLoad.length);
+        console.log('First 500 chars:', xmlToLoad.substring(0, 500));
         
         // Load MusicXML
         await osmd.load(xmlToLoad);
@@ -339,3 +349,4 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
     </div>
   );
 }
+
