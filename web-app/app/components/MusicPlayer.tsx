@@ -181,9 +181,10 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
                 const hasMetronome = /<metronome\b/.test(measureContent);
                 
                 console.log('First measure tempo check:', { hasSoundTempo, hasMetronome });
+                console.log('First measure content (first 1000 chars):', measureContent.substring(0, 1000));
                 
                 // If this first measure doesn't have tempo, inject it
-                if (!hasSoundTempo || !hasMetronome) {
+                if (!hasSoundTempo && !hasMetronome) {
                   // Find where to insert - after <attributes> if present
                   const attributesMatch = measureContent.match(/<attributes\b[\s\S]*?<\/attributes>/);
                   let insertPositionInMeasure = firstMeasureMatch[0].length;
