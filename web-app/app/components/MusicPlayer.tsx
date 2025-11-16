@@ -164,10 +164,31 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           PlaybackManager?: unknown;
         };
         
-        // Load MusicXML
-        await osmd.load(musicxml);
+        // Trim and validate MusicXML string
+        const trimmedXml = musicxml.trim();
         
-        // Initialize playback if sheet is loaded
+        // Check if XML starts with <?xml declaration, if not, add it
+        let xmlToLoad = trimmedXml;
+        if (!trimmedXml.startsWith('<?xml')) {
+          // Some MusicXML files might not have the XML declaration
+          // Try to find the root element
+          const rootMatch = trimmedXml.match(/<(\w+:)?score-partwise|<(\w+:)?score-timewise/);
+          if (rootMatch) {
+            // Add XML declaration if missing
+            xmlToLoad = '<?xml version="1.0" encoding="UTF-8"?>\n' + trimmedXml;
+          } else {
+            console.warn('MusicXML does not start with <?xml and no root element found');
+            console.log('First 200 chars:', trimmedXml.substring(0, 200));
+          }
+        }
+        
+        // Load MusicXML
+        await osmd.load(xmlToLoad);
+        
+        // Render the sheet music first
+        await osmd.render();
+        
+        // Initialize playback if sheet is loaded (after render)
         if (osmd.Sheet && playbackManagerRef.current && timingSourceRef.current) {
           const playbackManager = playbackManagerRef.current as {
             initialize: (manager: unknown) => void;
@@ -191,14 +212,20 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           
           osmd.PlaybackManager = playbackManager;
         }
-        
-        // Render the sheet music
-        await osmd.render();
 
         setLoading(false);
       } catch (err: unknown) {
         console.error('Failed to render music', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to render music notation';
+        let errorMessage = 'Failed to render music notation';
+        
+        if (err instanceof Error) {
+          errorMessage = err.message;
+          // Check for OSMD-specific error messages
+          if (err.message.includes('incomplete') || err.message.includes('could not be loaded')) {
+            errorMessage = 'The MusicXML file appears to be invalid or incomplete. Please check the file format.';
+          }
+        }
+        
         setError(errorMessage);
         setLoading(false);
       }
