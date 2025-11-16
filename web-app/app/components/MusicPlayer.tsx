@@ -154,28 +154,55 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         // Convert MusicXML 4.0 to 3.1
         xmlToLoad = convertMusicXmlForOsmd(xmlToLoad);
 
-        // Inject tempo if needed
-        const firstMeasureMatch = xmlToLoad.match(/<measure[^>]*>/);
-        if (firstMeasureMatch) {
-          const firstMeasureContentMatch = xmlToLoad.match(/<measure[^>]*>([\s\S]*?)<\/measure>/);
-          if (firstMeasureContentMatch) {
-            const firstMeasureContent = firstMeasureContentMatch[1];
-            const hasSoundTempo = /<sound[^>]+tempo=["'][^"']+["']/.test(firstMeasureContent);
-            const hasMetronome = firstMeasureContent.includes('<metronome>');
+        // Inject tempo if needed - OSMD Extended requires this in the FIRST measure
+        // Look for the first <measure> tag in ANY part
+        const allMeasuresMatch = xmlToLoad.match(/<measure\b[^>]*>/g);
+        if (allMeasuresMatch && allMeasuresMatch.length > 0) {
+          // Find the first measure tag and its content
+          const firstMeasureTag = allMeasuresMatch[0];
+          const firstMeasureIndex = xmlToLoad.indexOf(firstMeasureTag);
+          const firstMeasureEndIndex = xmlToLoad.indexOf('</measure>', firstMeasureIndex);
+          
+          if (firstMeasureEndIndex > firstMeasureIndex) {
+            const firstMeasureContent = xmlToLoad.substring(
+              firstMeasureIndex + firstMeasureTag.length,
+              firstMeasureEndIndex
+            );
             
+            // Check if this measure already has complete tempo information
+            const hasSoundTempo = /<sound\b[^>]*tempo=["'][^"']+["']/.test(firstMeasureContent);
+            const hasMetronome = /<metronome\b/.test(firstMeasureContent);
+            const hasDirection = /<direction\b/.test(firstMeasureContent);
+            
+            console.log('Tempo check:', { hasSoundTempo, hasMetronome, hasDirection });
+            
+            // If missing any tempo elements, inject a complete tempo directive
             if (!hasSoundTempo || !hasMetronome) {
+              // Find the position right after the opening measure tag
+              // Insert after any <attributes> tag if present, otherwise at the start
+              const attributesMatch = firstMeasureContent.match(/<attributes\b[\s\S]*?<\/attributes>/);
+              let insertPosition = firstMeasureIndex + firstMeasureTag.length;
+              
+              if (attributesMatch) {
+                // Insert after attributes
+                insertPosition = xmlToLoad.indexOf(attributesMatch[0], firstMeasureIndex) + attributesMatch[0].length;
+              }
+              
               const defaultTempo = `
-  <direction placement="above">
-    <direction-type>
-      <metronome parentheses="no">
-        <beat-unit>quarter</beat-unit>
-        <per-minute>120</per-minute>
-      </metronome>
-    </direction-type>
-    <sound tempo="120"/>
-  </direction>`;
-              xmlToLoad = xmlToLoad.replace(firstMeasureMatch[0], firstMeasureMatch[0] + defaultTempo);
-              console.log('Injected default tempo (120 BPM)');
+      <direction placement="above">
+        <direction-type>
+          <metronome parentheses="no">
+            <beat-unit>quarter</beat-unit>
+            <per-minute>120</per-minute>
+          </metronome>
+        </direction-type>
+        <sound tempo="120"/>
+      </direction>`;
+              
+              xmlToLoad = xmlToLoad.substring(0, insertPosition) + defaultTempo + xmlToLoad.substring(insertPosition);
+              console.log('Injected default tempo (120 BPM) after position:', insertPosition);
+            } else {
+              console.log('Tempo already present in first measure');
             }
           }
         }
@@ -185,6 +212,12 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         }
 
         console.log('Loading MusicXML, length:', xmlToLoad.length);
+        
+        // Debug: Log the first measure to verify tempo injection
+        const debugMeasure = xmlToLoad.match(/<measure\b[^>]*>[\s\S]*?<\/measure>/);
+        if (debugMeasure) {
+          console.log('First measure preview:', debugMeasure[0].substring(0, 500));
+        }
 
         const osmd = osmdRef.current;
         if (!osmd) throw new Error('OSMD not initialized');
