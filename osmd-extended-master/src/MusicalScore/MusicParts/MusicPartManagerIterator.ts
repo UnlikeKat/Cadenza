@@ -301,7 +301,9 @@ export class MusicPartManagerIterator {
                 // only adapt to new instantaneous exp if it has changed
                 if (!this.musicSheet.IgnoreTempoInstructions) { // e.g. user set fixed tempo via UI
                     // ToDo QuarterBpm:
-                    this.currentBpm = this.CurrentTempoChangingExpression.InstantaneousTempo.TempoInBpm;
+                    if (this.CurrentTempoChangingExpression.InstantaneousTempo) {
+                        this.currentBpm = this.CurrentTempoChangingExpression.InstantaneousTempo.TempoInBpm;
+                    }
                     //console.log("current bpm: " + this.currentBpm);
                 }
             }
