@@ -7,7 +7,42 @@ interface MusicPlayerProps {
   midiFile?: File;
 }
 
-export default function MusicPlayer({ musicxml, midiFile: _midiFile }: MusicPlayerProps) {
+declare global {
+  interface Window {
+    opensheetmusicdisplay?: {
+      OpenSheetMusicDisplay: new (container: HTMLElement, options?: unknown) => {
+        load: (xml: string) => Promise<void>;
+        render: () => Promise<void>;
+        Sheet?: {
+          playbackSettings: unknown;
+          musicPartManager: unknown;
+        };
+        cursor?: unknown;
+        PlaybackManager?: unknown;
+      };
+      PlaybackManager: new (timingSource: unknown, metronome?: unknown, audioPlayer?: unknown, controlPanel?: unknown) => {
+        DoPlayback: boolean;
+        DoPreCount: boolean;
+        initialize: (manager: unknown) => void;
+        addListener: (listener: unknown) => void;
+        reset: () => void;
+        play: () => Promise<void>;
+        pause: () => Promise<void>;
+      };
+      LinearTimingSource: new () => {
+        reset: () => void;
+        pause: () => void;
+        Settings: unknown;
+      };
+      BasicAudioPlayer: new () => unknown;
+      BackendType: {
+        SVG: string;
+      };
+    };
+  }
+}
+
+export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -16,30 +51,61 @@ export default function MusicPlayer({ musicxml, midiFile: _midiFile }: MusicPlay
   const playbackManagerRef = useRef<unknown>(null);
   const timingSourceRef = useRef<unknown>(null);
   const [osmdReady, setOsmdReady] = useState(false);
+  const scriptLoadedRef = useRef(false);
 
-  // Load OSMD dynamically
+  // Load OSMD script dynamically
   useEffect(() => {
-    if (typeof window === 'undefined' || !containerRef.current) return;
+    if (typeof window === 'undefined' || scriptLoadedRef.current) return;
 
-    const loadOSMD = async () => {
+    const loadOSMDScript = () => {
+      return new Promise<void>((resolve, reject) => {
+        // Check if already loaded
+        if (window.opensheetmusicdisplay) {
+          resolve();
+          return;
+        }
+
+        // Check if script is already in the DOM
+        const existingScript = document.querySelector('script[src="/osmd/opensheetmusicdisplay.min.js"]');
+        if (existingScript) {
+          // Wait for it to load
+          existingScript.addEventListener('load', () => resolve());
+          existingScript.addEventListener('error', () => reject(new Error('Failed to load OSMD script')));
+          return;
+        }
+
+        // Create and load script
+        const script = document.createElement('script');
+        script.src = '/osmd/opensheetmusicdisplay.min.js';
+        script.async = true;
+        script.onload = () => {
+          scriptLoadedRef.current = true;
+          resolve();
+        };
+        script.onerror = () => {
+          reject(new Error('Failed to load OSMD script'));
+        };
+        document.head.appendChild(script);
+      });
+    };
+
+    const initializeOSMD = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Dynamic import of OSMD modules
-        const OSMDModule = await import('@osmd/OpenSheetMusicDisplay/OpenSheetMusicDisplay');
-        const PlaybackModule = await import('@osmd/Playback');
-        const OptionsModule = await import('@osmd/OpenSheetMusicDisplay/OSMDOptions');
+        // Load the script
+        await loadOSMDScript();
 
-        if (!OSMDModule?.OpenSheetMusicDisplay || !PlaybackModule?.PlaybackManager) {
-          throw new Error('OSMD library modules not found. Please ensure OSMD is built.');
+        if (!window.opensheetmusicdisplay || !containerRef.current) {
+          throw new Error('OSMD library not available after loading script.');
         }
 
-        const OSMD = OSMDModule.OpenSheetMusicDisplay;
-        const PM = PlaybackModule.PlaybackManager;
-        const LTS = PlaybackModule.LinearTimingSource;
-        const BAP = PlaybackModule.BasicAudioPlayer;
-        const BT = OptionsModule.BackendType;
+        const OSMD = window.opensheetmusicdisplay.OpenSheetMusicDisplay;
+        const PM = window.opensheetmusicdisplay.PlaybackManager;
+        const LTS = window.opensheetmusicdisplay.LinearTimingSource;
+        const BAP = window.opensheetmusicdisplay.BasicAudioPlayer;
+        const BT = window.opensheetmusicdisplay.BackendType;
 
         // Create OSMD instance
         const osmd = new OSMD(containerRef.current, {
@@ -69,13 +135,13 @@ export default function MusicPlayer({ musicxml, midiFile: _midiFile }: MusicPlay
         setLoading(false);
       } catch (err: unknown) {
         console.error('Failed to load OSMD', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load music display library. Please ensure OSMD is built in osmd-extended-master folder.';
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load music display library.';
         setError(errorMessage);
         setLoading(false);
       }
     };
 
-    loadOSMD();
+    initializeOSMD();
   }, []);
 
   // Load and render MusicXML
