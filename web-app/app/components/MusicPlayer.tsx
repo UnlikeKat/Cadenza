@@ -190,12 +190,16 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
               const firstMeasureContentMatch = xmlToLoad.match(/<measure[^>]*>([\s\S]*?)<\/measure>/);
               if (firstMeasureContentMatch) {
                 const firstMeasureContent = firstMeasureContentMatch[1];
-                if (!firstMeasureContent.includes('<direction')) {
-                  // No direction found, inject a default tempo
+                // Check if there's a valid tempo marking with both <sound tempo=""> and proper direction
+                const hasSoundTempo = /<sound[^>]+tempo=["'][^"']+["']/.test(firstMeasureContent);
+                const hasMetronome = firstMeasureContent.includes('<metronome>');
+                
+                if (!hasSoundTempo || !hasMetronome) {
+                  // Inject a complete tempo marking
                   const defaultTempo = `
   <direction placement="above">
     <direction-type>
-      <metronome>
+      <metronome parentheses="no">
         <beat-unit>quarter</beat-unit>
         <per-minute>120</per-minute>
       </metronome>
@@ -203,7 +207,8 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
     <sound tempo="120"/>
   </direction>`;
                   xmlToLoad = xmlToLoad.replace(firstMeasureMatch[0], firstMeasureMatch[0] + defaultTempo);
-                  console.log('Injected default tempo into the first measure for OSMD compatibility.');
+                  console.log('Injected default tempo (120 BPM) into the first measure for OSMD compatibility.');
+                  console.log('Reason: hasSoundTempo=' + hasSoundTempo + ', hasMetronome=' + hasMetronome);
                 }
               }
             }
