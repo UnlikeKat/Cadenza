@@ -140,25 +140,31 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     playingNotes.forEach(note => note.classList.remove('playing'));
   };
 
-  // Smooth animation for vertical line position
+  // Smooth animation for vertical line position - runs continuously during playback
   const animateOverlayPosition = () => {
     const overlay = overlayRef.current;
-    if (!overlay) return;
+    if (!overlay) {
+      animationFrameRef.current = null;
+      return;
+    }
 
     const { x, targetX } = currentPositionRef.current;
     
     // Smooth interpolation using easing
     const diff = targetX - x;
-    if (Math.abs(diff) < 0.5) {
+    if (Math.abs(diff) < 0.1) {
       currentPositionRef.current.x = targetX;
     } else {
-      currentPositionRef.current.x += diff * 0.15; // Smooth interpolation factor
+      currentPositionRef.current.x += diff * 0.2; // Smooth interpolation factor
     }
 
     overlay.style.left = `${currentPositionRef.current.x}px`;
     
-    if (Math.abs(diff) > 0.5) {
+    // Continue animation as long as transport is playing
+    if (Tone.getTransport().state === 'started') {
       animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
+    } else {
+      animationFrameRef.current = null;
     }
   };
 
@@ -167,28 +173,32 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     const overlay = overlayRef.current;
     const wrapper = wrapperRef.current;
 
-    if (!overlay || !wrapper || elements.length === 0) {
-      if (overlay) {
-        overlay.style.opacity = '0';
-      }
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
+    if (!overlay || !wrapper) {
+      return;
+    }
+
+    if (elements.length === 0) {
+      overlay.style.opacity = '0';
       return;
     }
 
     const wrapperRect = wrapper.getBoundingClientRect();
     const rects = elements
-      .filter(el => 'getBoundingClientRect' in el && typeof el.getBoundingClientRect === 'function')
+      .filter(el => {
+        if (!('getBoundingClientRect' in el) || typeof el.getBoundingClientRect !== 'function') {
+          return false;
+        }
+        try {
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        } catch {
+          return false;
+        }
+      })
       .map(el => el.getBoundingClientRect());
 
     if (rects.length === 0) {
       overlay.style.opacity = '0';
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
       return;
     }
 
@@ -206,9 +216,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     // Set target position for smooth animation
     currentPositionRef.current.targetX = clampedLeft;
     
-    // Initialize current position if not set
-    if (currentPositionRef.current.x === 0) {
+    // Initialize current position if not set or if it's still 0
+    if (currentPositionRef.current.x === 0 && clampedLeft > 0) {
       currentPositionRef.current.x = clampedLeft;
+      overlay.style.left = `${clampedLeft}px`;
     }
 
     overlay.style.top = '0px';
@@ -216,8 +227,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     overlay.style.height = `${wrapperHeight}px`;
     overlay.style.opacity = '1';
 
-    // Start smooth animation if not already running
-    if (animationFrameRef.current === null) {
+    // Start smooth animation if not already running and transport is started
+    if (animationFrameRef.current === null && Tone.getTransport().state === 'started') {
       animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
     }
   };
@@ -226,44 +237,41 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const scrollHighlightedIntoView = (elements: Element[]) => {
     if (elements.length === 0) return;
 
+    // The scroll container is the parent of wrapperRef (the div with overflow-y-auto)
     const scrollHost = wrapperRef.current?.parentElement;
     if (!scrollHost) return;
 
-    // Find the leftmost note element for horizontal tracking
-    const target = elements.reduce((leftmost, el) => {
+    // Find valid elements with bounding rects
+    const validElements = elements.filter(el => {
       if (!('getBoundingClientRect' in el) || typeof el.getBoundingClientRect !== 'function') {
-        return leftmost;
+        return false;
       }
-      if (!leftmost) return el;
-      const leftmostRect = leftmost.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      return elRect.left < leftmostRect.left ? el : leftmost;
-    }, null as Element | null);
+      try {
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      } catch {
+        return false;
+      }
+    });
 
-    if (!target || !('getBoundingClientRect' in target)) {
-      return;
-    }
+    if (validElements.length === 0) return;
 
-    const noteRect = target.getBoundingClientRect();
-    const containerRect = scrollHost.getBoundingClientRect();
-    
     // Calculate vertical center of the note group
-    const noteTop = Math.min(...elements
-      .filter(el => 'getBoundingClientRect' in el)
-      .map(el => (el as Element & { getBoundingClientRect(): DOMRect }).getBoundingClientRect().top));
-    const noteBottom = Math.max(...elements
-      .filter(el => 'getBoundingClientRect' in el)
-      .map(el => (el as Element & { getBoundingClientRect(): DOMRect }).getBoundingClientRect().bottom));
+    const rects = validElements.map(el => el.getBoundingClientRect());
+    const noteTop = Math.min(...rects.map(r => r.top));
+    const noteBottom = Math.max(...rects.map(r => r.bottom));
     const noteCenterY = (noteTop + noteBottom) / 2;
     
-    // More aggressive scrolling - keep the note centered vertically
+    const containerRect = scrollHost.getBoundingClientRect();
     const viewportCenter = containerRect.top + containerRect.height / 2;
     const offset = noteCenterY - viewportCenter;
     
-    // Smooth scroll with smaller threshold to keep it centered
-    if (Math.abs(offset) > 50) {
+    // Continuous smooth scrolling - keep the note centered vertically
+    // Use smaller threshold and more aggressive scrolling
+    if (Math.abs(offset) > 30) {
+      const scrollAmount = offset * 0.4; // More aggressive scroll factor
       scrollHost.scrollBy({
-        top: offset * 0.3, // Smooth scroll factor
+        top: scrollAmount,
         behavior: 'auto' // Use 'auto' for smoother continuous scrolling
       });
     }
@@ -287,33 +295,82 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       const timeInMs = Math.max(0, Math.round(timeSeconds * 1000));
       const elementsAtTime = toolkit.getElementsAtTime(timeInMs);
 
-      if (!elementsAtTime || !elementsAtTime.notes) return [];
+      if (!elementsAtTime || !elementsAtTime.notes || elementsAtTime.notes.length === 0) {
+        return [];
+      }
 
       const highlightedElements: Element[] = [];
       const processedNoteGroups = new Set<string>();
 
       // Highlight notes by adding CSS class - find all elements in chords
       for (const noteId of elementsAtTime.notes) {
-        const safeId = typeof CSS !== 'undefined' && CSS.escape 
-          ? CSS.escape(noteId) 
-          : noteId.replace(/([:\[\].#])/g, '\\$1');
+        // Try multiple ID formats - Verovio might use different formats
+        const idVariations = [
+          noteId,
+          noteId.replace(/^note-/, ''),
+          noteId.replace(/^#/, ''),
+          `note-${noteId}`,
+          `#${noteId}`
+        ];
+
+        let noteElement: Element | null = null;
         
-        // Find the main note element
-        const noteElement = containerRef.current.querySelector(`[id="${safeId}"]`);
+        // Try to find the element using different ID formats
+        for (const id of idVariations) {
+          try {
+            const safeId = typeof CSS !== 'undefined' && CSS.escape 
+              ? CSS.escape(id) 
+              : id.replace(/([:\[\].#])/g, '\\$1');
+            
+            // Try exact ID match
+            noteElement = containerRef.current.querySelector(`[id="${safeId}"]`);
+            if (noteElement) break;
+            
+            // Try without escaping (in case CSS.escape is too strict)
+            noteElement = containerRef.current.querySelector(`[id="${id}"]`);
+            if (noteElement) break;
+            
+            // Try as attribute selector
+            noteElement = containerRef.current.querySelector(`#${safeId}`);
+            if (noteElement) break;
+          } catch (e) {
+            // Continue to next variation
+            continue;
+          }
+        }
         
         if (noteElement) {
           // Add the main note element
           noteElement.classList.add('playing');
           highlightedElements.push(noteElement);
           
-          // For chords, find all note elements in the same group
-          // Verovio structures chords as <g class="note"> containing multiple note elements
-          const noteGroup = noteElement.closest('g.note');
-          if (noteGroup && !processedNoteGroups.has(noteGroup.id || '')) {
-            processedNoteGroups.add(noteGroup.id || '');
+          // Find the note group (chord container)
+          let noteGroup: Element | null = null;
+          let current: Element | null = noteElement;
+          
+          // Walk up the DOM to find the note group
+          while (current && current !== containerRef.current) {
+            if (current instanceof SVGElement || current instanceof HTMLElement) {
+              const classList = current.classList;
+              if (classList && (classList.contains('note') || current.tagName === 'g')) {
+                // Check if this group contains multiple notes (chord)
+                const notesInGroup = current.querySelectorAll('[id*="note"], g.note, use[class*="notehead"]');
+                if (notesInGroup.length > 1 || classList.contains('note')) {
+                  noteGroup = current;
+                  break;
+                }
+              }
+            }
+            current = current.parentElement;
+          }
+          
+          // If we found a note group (chord), highlight all notes in it
+          if (noteGroup && !processedNoteGroups.has(noteGroup.id || noteGroup.getAttribute('id') || '')) {
+            const groupId = noteGroup.id || noteGroup.getAttribute('id') || '';
+            processedNoteGroups.add(groupId);
             
             // Find all note elements in this chord group
-            const allNotesInGroup = noteGroup.querySelectorAll('[id^="note"], g.note, use[class*="note"], use[class*="notehead"]');
+            const allNotesInGroup = noteGroup.querySelectorAll('g[id*="note"], [id*="note"]');
             allNotesInGroup.forEach(note => {
               if (!highlightedElements.includes(note)) {
                 note.classList.add('playing');
@@ -321,7 +378,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
               }
             });
             
-            // Also find all child elements that represent the note visually
+            // Also find all visual child elements that represent notes
             const visualElements = noteGroup.querySelectorAll('use, path, ellipse, circle, rect');
             visualElements.forEach(el => {
               if (!highlightedElements.includes(el)) {
@@ -330,7 +387,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
               }
             });
           } else {
-            // For single notes, also highlight all visual child elements
+            // For single notes, highlight all visual child elements
             const visualElements = noteElement.querySelectorAll('use, path, ellipse, circle, rect');
             visualElements.forEach(el => {
               if (!highlightedElements.includes(el)) {
@@ -339,16 +396,19 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
               }
             });
             
-            // Also check parent group for additional note elements
+            // Also check parent group for additional note elements (siblings in chord)
             const parentGroup = noteElement.parentElement;
-            if (parentGroup && parentGroup.classList.contains('note')) {
-              const siblingNotes = parentGroup.querySelectorAll('[id^="note"]');
-              siblingNotes.forEach(sibling => {
-                if (!highlightedElements.includes(sibling)) {
-                  sibling.classList.add('playing');
-                  highlightedElements.push(sibling);
-                }
-              });
+            if (parentGroup) {
+              const parentClassList = parentGroup.classList;
+              if (parentClassList && parentClassList.contains('note')) {
+                const siblingNotes = parentGroup.querySelectorAll('[id*="note"]');
+                siblingNotes.forEach(sibling => {
+                  if (!highlightedElements.includes(sibling) && sibling !== noteElement) {
+                    sibling.classList.add('playing');
+                    highlightedElements.push(sibling);
+                  }
+                });
+              }
             }
           }
         }
@@ -587,25 +647,30 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       });
 
       // Create a continuous highlight loop for smooth updates
-      let lastHighlightTime = 0;
+      let lastHighlightTime = -1;
       const highlightLoop = () => {
         const transportState = Tone.getTransport().state;
-        if (transportState !== 'started') return;
+        if (transportState !== 'started') {
+          return;
+        }
         
         const currentTime = Tone.getTransport().seconds;
         
-        // Update highlights more frequently for smoother experience
-        if (Math.abs(currentTime - lastHighlightTime) > 0.05) {
+        // Update highlights frequently for smoother experience (every 50ms)
+        if (Math.abs(currentTime - lastHighlightTime) >= 0.05 || lastHighlightTime < 0) {
           clearHighlightedNotes();
           
+          // Use Verovio's getElementsAtTime with current playback time
           const highlighted = highlightUsingVerovio(currentTime);
           const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
           
           // Update vertical line position (smooth animation)
-          updateOverlayPosition(toHandle);
-          
-          // Continuously scroll to keep position visible
-          scrollHighlightedIntoView(toHandle);
+          if (toHandle.length > 0) {
+            updateOverlayPosition(toHandle);
+            
+            // Continuously scroll to keep position visible
+            scrollHighlightedIntoView(toHandle);
+          }
           
           lastHighlightTime = currentTime;
         }
@@ -690,6 +755,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     
     // Reset position
     currentPositionRef.current = { x: 0, targetX: 0 };
+    
+    // Reset overlay position
+    if (overlayRef.current) {
+      overlayRef.current.style.left = '0px';
+    }
 
     setIsPlaying(false);
   };
