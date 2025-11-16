@@ -28,6 +28,8 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const stopTimeoutRef = useRef<number | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const currentPositionRef = useRef<{ x: number; targetX: number }>({ x: 0, targetX: 0 });
 
   const disposeFxNodes = () => {
     if (samplerRef.current) {
@@ -133,9 +135,31 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const clearHighlightedNotes = () => {
     if (!containerRef.current) return;
     
-    // Remove 'playing' class from all currently playing notes
-    const playingNotes = containerRef.current.querySelectorAll('g.note.playing');
+    // Remove 'playing' class from all currently playing notes and elements
+    const playingNotes = containerRef.current.querySelectorAll('.playing');
     playingNotes.forEach(note => note.classList.remove('playing'));
+  };
+
+  // Smooth animation for vertical line position
+  const animateOverlayPosition = () => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    const { x, targetX } = currentPositionRef.current;
+    
+    // Smooth interpolation using easing
+    const diff = targetX - x;
+    if (Math.abs(diff) < 0.5) {
+      currentPositionRef.current.x = targetX;
+    } else {
+      currentPositionRef.current.x += diff * 0.15; // Smooth interpolation factor
+    }
+
+    overlay.style.left = `${currentPositionRef.current.x}px`;
+    
+    if (Math.abs(diff) > 0.5) {
+      animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
+    }
   };
 
   // Update the vertical line position based on note position
@@ -147,6 +171,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       if (overlay) {
         overlay.style.opacity = '0';
       }
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       return;
     }
 
@@ -157,6 +185,10 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
     if (rects.length === 0) {
       overlay.style.opacity = '0';
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       return;
     }
 
@@ -171,42 +203,68 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     const leftPos = centerX - wrapperRect.left - lineWidth / 2;
     const clampedLeft = Math.max(0, Math.min(leftPos, wrapperRect.width - lineWidth));
 
-    overlay.style.left = `${clampedLeft}px`;
+    // Set target position for smooth animation
+    currentPositionRef.current.targetX = clampedLeft;
+    
+    // Initialize current position if not set
+    if (currentPositionRef.current.x === 0) {
+      currentPositionRef.current.x = clampedLeft;
+    }
+
     overlay.style.top = '0px';
     overlay.style.width = `${lineWidth}px`;
     overlay.style.height = `${wrapperHeight}px`;
     overlay.style.opacity = '1';
+
+    // Start smooth animation if not already running
+    if (animationFrameRef.current === null) {
+      animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
+    }
   };
 
-  // Smooth scroll to keep the playback line visible without jumping
+  // Smooth scroll to keep the playback line visible - continuously track position
   const scrollHighlightedIntoView = (elements: Element[]) => {
     if (elements.length === 0) return;
 
     const scrollHost = wrapperRef.current?.parentElement;
     if (!scrollHost) return;
 
-    const target = elements[0];
-    if (!('getBoundingClientRect' in target) || typeof target.getBoundingClientRect !== 'function') {
+    // Find the leftmost note element for horizontal tracking
+    const target = elements.reduce((leftmost, el) => {
+      if (!('getBoundingClientRect' in el) || typeof el.getBoundingClientRect !== 'function') {
+        return leftmost;
+      }
+      if (!leftmost) return el;
+      const leftmostRect = leftmost.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      return elRect.left < leftmostRect.left ? el : leftmost;
+    }, null as Element | null);
+
+    if (!target || !('getBoundingClientRect' in target)) {
       return;
     }
 
     const noteRect = target.getBoundingClientRect();
     const containerRect = scrollHost.getBoundingClientRect();
     
-    // Only scroll if note is significantly outside the visible area
-    // Use larger margins to prevent constant micro-scrolling
-    const topMargin = containerRect.height * 0.3;
-    const bottomMargin = containerRect.height * 0.3;
+    // Calculate vertical center of the note group
+    const noteTop = Math.min(...elements
+      .filter(el => 'getBoundingClientRect' in el)
+      .map(el => (el as Element & { getBoundingClientRect(): DOMRect }).getBoundingClientRect().top));
+    const noteBottom = Math.max(...elements
+      .filter(el => 'getBoundingClientRect' in el)
+      .map(el => (el as Element & { getBoundingClientRect(): DOMRect }).getBoundingClientRect().bottom));
+    const noteCenterY = (noteTop + noteBottom) / 2;
     
-    const isAboveView = noteRect.top < (containerRect.top + topMargin);
-    const isBelowView = noteRect.bottom > (containerRect.bottom - bottomMargin);
-
-    // Only scroll when really necessary
-    if (isAboveView || isBelowView) {
-      // Scroll to center, but only if significantly out of view
-      scrollHost.scrollTo({
-        top: scrollHost.scrollTop + (noteRect.top - containerRect.top - containerRect.height / 2),
-        behavior: 'smooth'
+    // More aggressive scrolling - keep the note centered vertically
+    const viewportCenter = containerRect.top + containerRect.height / 2;
+    const offset = noteCenterY - viewportCenter;
+    
+    // Smooth scroll with smaller threshold to keep it centered
+    if (Math.abs(offset) > 50) {
+      scrollHost.scrollBy({
+        top: offset * 0.3, // Smooth scroll factor
+        behavior: 'auto' // Use 'auto' for smoother continuous scrolling
       });
     }
   };
@@ -232,17 +290,67 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       if (!elementsAtTime || !elementsAtTime.notes) return [];
 
       const highlightedElements: Element[] = [];
+      const processedNoteGroups = new Set<string>();
 
-      // Highlight notes by adding CSS class
+      // Highlight notes by adding CSS class - find all elements in chords
       for (const noteId of elementsAtTime.notes) {
         const safeId = typeof CSS !== 'undefined' && CSS.escape 
           ? CSS.escape(noteId) 
           : noteId.replace(/([:\[\].#])/g, '\\$1');
+        
+        // Find the main note element
         const noteElement = containerRef.current.querySelector(`[id="${safeId}"]`);
         
         if (noteElement) {
+          // Add the main note element
           noteElement.classList.add('playing');
           highlightedElements.push(noteElement);
+          
+          // For chords, find all note elements in the same group
+          // Verovio structures chords as <g class="note"> containing multiple note elements
+          const noteGroup = noteElement.closest('g.note');
+          if (noteGroup && !processedNoteGroups.has(noteGroup.id || '')) {
+            processedNoteGroups.add(noteGroup.id || '');
+            
+            // Find all note elements in this chord group
+            const allNotesInGroup = noteGroup.querySelectorAll('[id^="note"], g.note, use[class*="note"], use[class*="notehead"]');
+            allNotesInGroup.forEach(note => {
+              if (!highlightedElements.includes(note)) {
+                note.classList.add('playing');
+                highlightedElements.push(note);
+              }
+            });
+            
+            // Also find all child elements that represent the note visually
+            const visualElements = noteGroup.querySelectorAll('use, path, ellipse, circle, rect');
+            visualElements.forEach(el => {
+              if (!highlightedElements.includes(el)) {
+                el.classList.add('playing');
+                highlightedElements.push(el);
+              }
+            });
+          } else {
+            // For single notes, also highlight all visual child elements
+            const visualElements = noteElement.querySelectorAll('use, path, ellipse, circle, rect');
+            visualElements.forEach(el => {
+              if (!highlightedElements.includes(el)) {
+                el.classList.add('playing');
+                highlightedElements.push(el);
+              }
+            });
+            
+            // Also check parent group for additional note elements
+            const parentGroup = noteElement.parentElement;
+            if (parentGroup && parentGroup.classList.contains('note')) {
+              const siblingNotes = parentGroup.querySelectorAll('[id^="note"]');
+              siblingNotes.forEach(sibling => {
+                if (!highlightedElements.includes(sibling)) {
+                  sibling.classList.add('playing');
+                  highlightedElements.push(sibling);
+                }
+              });
+            }
+          }
         }
       }
 
@@ -287,6 +395,11 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       if (typeof window !== 'undefined' && stopTimeoutRef.current !== null) {
         window.clearTimeout(stopTimeoutRef.current);
         stopTimeoutRef.current = null;
+      }
+
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
 
       scheduledPartsRef.current.forEach(part => {
@@ -473,26 +586,52 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
         scheduledPartsRef.current.push(part as unknown as TonePartHandle);
       });
 
-      const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
-        const noteTime = event.highlightTime;
-        Tone.getDraw().schedule(() => {
-          // Clear previous highlights
+      // Create a continuous highlight loop for smooth updates
+      let lastHighlightTime = 0;
+      const highlightLoop = () => {
+        const transportState = Tone.getTransport().state;
+        if (transportState !== 'started') return;
+        
+        const currentTime = Tone.getTransport().seconds;
+        
+        // Update highlights more frequently for smoother experience
+        if (Math.abs(currentTime - lastHighlightTime) > 0.05) {
           clearHighlightedNotes();
           
-          // Highlight current notes
-          const highlighted = highlightUsingVerovio(noteTime);
+          const highlighted = highlightUsingVerovio(currentTime);
           const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
           
-          // Update vertical line position
+          // Update vertical line position (smooth animation)
           updateOverlayPosition(toHandle);
           
-          // Scroll if needed (less aggressive)
+          // Continuously scroll to keep position visible
+          scrollHighlightedIntoView(toHandle);
+          
+          lastHighlightTime = currentTime;
+        }
+        
+        // Continue the loop only if transport is still started
+        if (Tone.getTransport().state === 'started') {
+          Tone.getDraw().schedule(highlightLoop, Tone.now() + 0.05);
+        }
+      };
+
+      // Schedule highlight updates at note times AND continuously
+      const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
+        Tone.getDraw().schedule(() => {
+          clearHighlightedNotes();
+          const highlighted = highlightUsingVerovio(event.highlightTime);
+          const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
+          updateOverlayPosition(toHandle);
           scrollHighlightedIntoView(toHandle);
         }, time);
       }, uniqueTimes.map(highlightTime => ({
         time: highlightTime,
         highlightTime
       })));
+
+      // Start continuous highlight loop
+      Tone.getDraw().schedule(highlightLoop, 0);
 
       highlightPart.start(0);
       scheduledPartsRef.current.push(highlightPart as unknown as TonePartHandle);
@@ -543,6 +682,15 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
       overlayRef.current.style.opacity = '0';
     }
 
+    // Reset animation frame
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    // Reset position
+    currentPositionRef.current = { x: 0, targetX: 0 };
+
     setIsPlaying(false);
   };
 
@@ -562,7 +710,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   };
 
   return (
-    <div className="bg-purple-900/30 rounded-lg p-4 sm:p-6 border border-purple-400/30">
+    <div>
       {/* Zoom Slider */}
       {showZoomSlider && (
         <div className="mb-4 sm:mb-6 bg-purple-900/50 rounded-lg p-3 sm:p-4 border border-purple-400/30">
@@ -697,14 +845,27 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           display: none;
         }
         
-        /* Verovio note highlighting - official pattern */
+        /* Verovio note highlighting - targets all playing elements */
+        :global(.playing) {
+          fill: #a78bfa !important;
+        }
+        
+        :global(.playing path),
+        :global(.playing ellipse),
+        :global(.playing circle),
+        :global(.playing use),
+        :global(.playing rect) {
+          fill: #a78bfa !important;
+        }
+        
         :global(g.note.playing) {
           fill: #a78bfa !important;
         }
         
         :global(g.note.playing path),
         :global(g.note.playing ellipse),
-        :global(g.note.playing use) {
+        :global(g.note.playing use),
+        :global(g.note.playing circle) {
           fill: #a78bfa !important;
         }
       `}</style>
