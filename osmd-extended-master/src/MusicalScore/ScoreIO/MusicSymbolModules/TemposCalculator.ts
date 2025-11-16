@@ -189,8 +189,11 @@ export class TemposCalculator implements IAfterSheetReadingModule {
             }
         }
         musicSheet.TimestampSortedTempoExpressionsList = ExpressionsList;
-        if (ExpressionsList[0]) {
+        if (ExpressionsList[0] && ExpressionsList[0].InstantaneousTempo) {
             musicSheet.DefaultStartTempoInBpm = ExpressionsList[0].InstantaneousTempo.TempoInBpm;
+        } else if (ExpressionsList[0]) {
+            // Fallback: if no InstantaneousTempo, use a default tempo
+            musicSheet.DefaultStartTempoInBpm = 120;
         }
     }
     /** Clean the start of the  expressions list and return the TempoPrimo BPM.
