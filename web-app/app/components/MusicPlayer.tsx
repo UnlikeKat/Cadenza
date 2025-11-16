@@ -238,32 +238,16 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           const errorMsg = loadError instanceof Error ? loadError.message : String(loadError);
           console.error('OSMD load failed:', errorMsg);
           
-          // If it's a tempo-related error, try one more time with a simpler tempo structure
+          // This is a known issue with OSMD extended version and MusicXML 4.0 files
+          // The TemposCalculator has a bug where it tries to access TempoInBpm on undefined objects
           if (errorMsg.includes('TempoInBpm') || errorMsg.includes('incomplete')) {
-            console.log('Attempting alternative tempo injection method');
-            // Try a more minimal tempo structure
-            if (firstMeasureMatch) {
-              const measureIndex = firstMeasureMatch.index! + firstMeasureMatch[0].length;
-              let insertIndex = measureIndex;
-              while (insertIndex < xmlToLoad.length && /\s/.test(xmlToLoad[insertIndex])) {
-                insertIndex++;
-              }
-              
-              // Remove any previous tempo injection attempts
-              const cleanedXml = xmlToLoad.replace(/<direction[^>]*>[\s\S]*?<\/direction>\s*/g, '');
-              
-              // Add minimal tempo
-              const minimalTempo = `<direction><sound tempo="120"/></direction>`;
-              const finalXml = cleanedXml.slice(0, insertIndex) + minimalTempo + cleanedXml.slice(insertIndex);
-              
-              console.log('Retrying with minimal tempo structure');
-              await osmd.load(finalXml);
-            } else {
-              throw loadError;
-            }
-          } else {
-            throw loadError;
+            throw new Error(
+              'OSMD compatibility issue: This MusicXML file (version 4.0 from MuseScore) appears to have a compatibility issue with the OSMD extended library. ' +
+              'The error occurs during tempo calculation. This may be a bug in OSMD\'s TemposCalculator. ' +
+              'Please try exporting the file as MusicXML 3.1 or 3.0, or contact the OSMD extended repository maintainers.'
+            );
           }
+          throw loadError;
         }
         
         // Render the sheet music first
@@ -301,9 +285,18 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
         
         if (err instanceof Error) {
           errorMessage = err.message;
-          // Check for OSMD-specific error messages
-          if (err.message.includes('incomplete') || err.message.includes('could not be loaded')) {
-            errorMessage = 'The MusicXML file appears to be invalid or incomplete. Please check the file format.';
+          
+          // Provide specific error messages for known issues
+          if (err.message.includes('TempoInBpm') || err.message.includes('OSMD compatibility')) {
+            errorMessage = err.message; // Use the detailed message we set
+          } else if (err.message.includes('incomplete') || err.message.includes('could not be loaded')) {
+            errorMessage = 'The MusicXML file could not be loaded. This may be due to:\n' +
+              '• Compatibility issues with MusicXML 4.0\n' +
+              '• Missing or invalid tempo information\n' +
+              '• A bug in the OSMD library\n\n' +
+              'Try exporting your file as MusicXML 3.1 or 3.0 format.';
+          } else if (err.message.includes('duration is not valid')) {
+            errorMessage = 'Invalid duration found in MusicXML. The file may be corrupted or use unsupported features.';
           }
         }
         
