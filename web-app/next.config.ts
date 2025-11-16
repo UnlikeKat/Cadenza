@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -10,6 +11,13 @@ const nextConfig: NextConfig = {
         crypto: false,
       };
     }
+    
+    // Allow importing from osmd-extended-master
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@osmd': path.resolve(__dirname, '../osmd-extended-master/src'),
+    };
+    
     return config;
   },
 };

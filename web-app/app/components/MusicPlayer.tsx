@@ -1,9 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import verovio from 'verovio';
-import { Midi } from '@tonejs/midi';
-import * as Tone from 'tone';
+import { useEffect, useRef, useState } from 'react';
+
+// Import OSMD from source - using dynamic imports to handle potential build issues
+let OpenSheetMusicDisplay: any;
+let PlaybackManager: any;
+let LinearTimingSource: any;
+let BasicAudioPlayer: any;
+let BackendType: any;
+
+// Try to load OSMD modules
+if (typeof window !== 'undefined') {
+  try {
+    // Dynamic import from OSMD source
+    import('@osmd/OpenSheetMusicDisplay/OpenSheetMusicDisplay').then(module => {
+      OpenSheetMusicDisplay = module.OpenSheetMusicDisplay;
+    }).catch(() => {
+      console.warn('Could not load OpenSheetMusicDisplay from source');
+    });
+    
+    import('@osmd/Playback').then(module => {
+      PlaybackManager = module.PlaybackManager;
+      LinearTimingSource = module.LinearTimingSource;
+      BasicAudioPlayer = module.BasicAudioPlayer;
+    }).catch(() => {
+      console.warn('Could not load Playback modules from source');
+    });
+    
+    import('@osmd/OpenSheetMusicDisplay/OSMDOptions').then(module => {
+      BackendType = module.BackendType;
+    }).catch(() => {
+      console.warn('Could not load OSMDOptions from source');
+    });
+  } catch (err) {
+    console.warn('OSMD modules not available', err);
+  }
+}
 
 interface MusicPlayerProps {
   musicxml?: string;
@@ -15,820 +47,157 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(35); // Zoom scale (20-100) - lower = more measures per line
-  const [showZoomSlider, setShowZoomSlider] = useState(false);
-  const [instrumentLoading, setInstrumentLoading] = useState(false);
-  const samplerRef = useRef<Tone.Sampler | null>(null);
+  const osmdRef = useRef<any>(null);
+  const playbackManagerRef = useRef<any>(null);
+  const timingSourceRef = useRef<any>(null);
+  const [osmdReady, setOsmdReady] = useState(false);
 
-  type TonePartHandle = Tone.Part;
-  const scheduledPartsRef = useRef<TonePartHandle[]>([]);
-  const verovioRef = useRef<InstanceType<typeof verovio.toolkit> | null>(null);
-  const noteElementsRef = useRef<Element[]>([]);
-  const fallbackNoteIndexRef = useRef(0);
-  const stopTimeoutRef = useRef<number | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const currentPositionRef = useRef<{ x: number; targetX: number }>({ x: 0, targetX: 0 });
-
-  const disposeFxNodes = () => {
-    if (samplerRef.current) {
-      samplerRef.current.dispose();
-      samplerRef.current = null;
-    }
-  };
-
-  // Ensure the Web Audio context unlocks on the first user gesture
+  // Load OSMD dynamically
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !containerRef.current) return;
 
-    let cancelled = false;
-
-    const unlock = async () => {
-      if (cancelled) return;
-      if (Tone.context.state !== 'running') {
-        await Tone.start();
-      }
-    };
-
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-    };
-  }, []);
-
-  const ensureSampler = useCallback(async () => {
-    if (samplerRef.current) {
-      return samplerRef.current;
-    }
-
-    if (typeof window === 'undefined') {
-      throw new Error('Audio engine is not available during server rendering');
-    }
-
-    setInstrumentLoading(true);
-    setError(null);
-
-    try {
-      // Create a high-quality piano sampler with Salamander Grand Piano samples
-      // Using a subset of notes for faster loading while maintaining quality
-      const sampler = new Tone.Sampler({
-        urls: {
-          A0: "A0.mp3",
-          C1: "C1.mp3",
-          "D#1": "Ds1.mp3",
-          "F#1": "Fs1.mp3",
-          A1: "A1.mp3",
-          C2: "C2.mp3",
-          "D#2": "Ds2.mp3",
-          "F#2": "Fs2.mp3",
-          A2: "A2.mp3",
-          C3: "C3.mp3",
-          "D#3": "Ds3.mp3",
-          "F#3": "Fs3.mp3",
-          A3: "A3.mp3",
-          C4: "C4.mp3",
-          "D#4": "Ds4.mp3",
-          "F#4": "Fs4.mp3",
-          A4: "A4.mp3",
-          C5: "C5.mp3",
-          "D#5": "Ds5.mp3",
-          "F#5": "Fs5.mp3",
-          A5: "A5.mp3",
-          C6: "C6.mp3",
-          "D#6": "Ds6.mp3",
-          "F#6": "Fs6.mp3",
-          A6: "A6.mp3",
-          C7: "C7.mp3",
-          "D#7": "Ds7.mp3",
-          "F#7": "Fs7.mp3",
-          A7: "A7.mp3",
-          C8: "C8.mp3"
-        },
-        release: 1,
-        baseUrl: "https://tonejs.github.io/audio/salamander/"
-      }).toDestination();
-
-      sampler.volume.value = -8;
-
-      await Tone.loaded();
-      samplerRef.current = sampler;
-      setInstrumentLoading(false);
-      return sampler;
-    } catch (err) {
-      console.error('Failed to load piano samples', err);
-      setError('Failed to load piano samples');
-      setInstrumentLoading(false);
-      throw err;
-    }
-  }, []);
-
-  // Not used anymore - we use CSS classes for highlighting
-  const applyHighlightToElement = (element: Element, collector: Set<Element>) => {
-    collector.add(element);
-  };
-
-  const clearHighlightedNotes = () => {
-    if (!containerRef.current) return;
-    
-    // Remove 'playing' class from all currently playing notes and elements
-    const playingNotes = containerRef.current.querySelectorAll('.playing');
-    playingNotes.forEach(note => note.classList.remove('playing'));
-  };
-
-  // Smooth animation for vertical line position - runs continuously during playback
-  const animateOverlayPosition = () => {
-    const overlay = overlayRef.current;
-    if (!overlay) {
-      animationFrameRef.current = null;
-      return;
-    }
-
-    const { x, targetX } = currentPositionRef.current;
-    
-    // Smooth interpolation using easing
-    const diff = targetX - x;
-    if (Math.abs(diff) < 0.1) {
-      currentPositionRef.current.x = targetX;
-    } else {
-      currentPositionRef.current.x += diff * 0.2; // Smooth interpolation factor
-    }
-
-    overlay.style.left = `${currentPositionRef.current.x}px`;
-    
-    // Continue animation as long as transport is playing
-    if (Tone.getTransport().state === 'started') {
-      animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
-    } else {
-      animationFrameRef.current = null;
-    }
-  };
-
-  // Update the vertical line position based on note position
-  const updateOverlayPosition = (elements: Element[]) => {
-    const overlay = overlayRef.current;
-    const wrapper = wrapperRef.current;
-
-    if (!overlay || !wrapper) {
-      return;
-    }
-
-    if (elements.length === 0) {
-      overlay.style.opacity = '0';
-      return;
-    }
-
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const rects = elements
-      .filter(el => {
-        if (!('getBoundingClientRect' in el) || typeof el.getBoundingClientRect !== 'function') {
-          return false;
-        }
-        try {
-          const rect = el.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        } catch {
-          return false;
-        }
-      })
-      .map(el => el.getBoundingClientRect());
-
-    if (rects.length === 0) {
-      overlay.style.opacity = '0';
-      return;
-    }
-
-    // Calculate the center X position of the notes
-    const minLeft = Math.min(...rects.map(r => r.left));
-    const maxRight = Math.max(...rects.map(r => r.right));
-    const centerX = (minLeft + maxRight) / 2;
-    
-    // Position a thin vertical line at the center
-    const lineWidth = 3;
-    const wrapperHeight = wrapper.scrollHeight || wrapperRect.height;
-    const leftPos = centerX - wrapperRect.left - lineWidth / 2;
-    const clampedLeft = Math.max(0, Math.min(leftPos, wrapperRect.width - lineWidth));
-
-    // Set target position for smooth animation
-    currentPositionRef.current.targetX = clampedLeft;
-    
-    // Initialize current position if not set or if it's still 0
-    if (currentPositionRef.current.x === 0 && clampedLeft > 0) {
-      currentPositionRef.current.x = clampedLeft;
-      overlay.style.left = `${clampedLeft}px`;
-    }
-
-    overlay.style.top = '0px';
-    overlay.style.width = `${lineWidth}px`;
-    overlay.style.height = `${wrapperHeight}px`;
-    overlay.style.opacity = '1';
-
-    // Start smooth animation if not already running and transport is started
-    if (animationFrameRef.current === null && Tone.getTransport().state === 'started') {
-      animationFrameRef.current = requestAnimationFrame(animateOverlayPosition);
-    }
-  };
-
-  // Smooth scroll to keep the playback line visible - continuously track position
-  const scrollHighlightedIntoView = (elements: Element[]) => {
-    if (elements.length === 0) return;
-
-    // The scroll container is the parent of wrapperRef (the div with overflow-y-auto)
-    const scrollHost = wrapperRef.current?.parentElement;
-    if (!scrollHost) return;
-
-    // Find valid elements with bounding rects
-    const validElements = elements.filter(el => {
-      if (!('getBoundingClientRect' in el) || typeof el.getBoundingClientRect !== 'function') {
-        return false;
-      }
-      try {
-        const rect = el.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      } catch {
-        return false;
-      }
-    });
-
-    if (validElements.length === 0) return;
-
-    // Calculate vertical center of the note group
-    const rects = validElements.map(el => el.getBoundingClientRect());
-    const noteTop = Math.min(...rects.map(r => r.top));
-    const noteBottom = Math.max(...rects.map(r => r.bottom));
-    const noteCenterY = (noteTop + noteBottom) / 2;
-    
-    const containerRect = scrollHost.getBoundingClientRect();
-    const viewportCenter = containerRect.top + containerRect.height / 2;
-    const offset = noteCenterY - viewportCenter;
-    
-    // Continuous smooth scrolling - keep the note centered vertically
-    // Use smaller threshold and more aggressive scrolling
-    if (Math.abs(offset) > 30) {
-      const scrollAmount = offset * 0.4; // More aggressive scroll factor
-      scrollHost.scrollBy({
-        top: scrollAmount,
-        behavior: 'auto' // Use 'auto' for smoother continuous scrolling
-      });
-    }
-  };
-
-  const highlightUsingVerovio = (timeSeconds: number): Element[] => {
-    if (!containerRef.current || !verovioRef.current) return [];
-
-    try {
-      const toolkit = verovioRef.current as unknown as {
-        getElementsAtTime?: (time: number) => { 
-          page?: number; 
-          notes?: string[];
-          rests?: string[];
-        };
-      };
-
-      if (!toolkit.getElementsAtTime) return [];
-
-      // Convert seconds to milliseconds as per Verovio documentation
-      const timeInMs = Math.max(0, Math.round(timeSeconds * 1000));
-      const elementsAtTime = toolkit.getElementsAtTime(timeInMs);
-
-      if (!elementsAtTime || !elementsAtTime.notes || elementsAtTime.notes.length === 0) {
-        return [];
-      }
-
-      const highlightedElements: Element[] = [];
-      const processedNoteGroups = new Set<string>();
-
-      // Highlight notes by adding CSS class - find all elements in chords
-      for (const noteId of elementsAtTime.notes) {
-        // Try multiple ID formats - Verovio might use different formats
-        const idVariations = [
-          noteId,
-          noteId.replace(/^note-/, ''),
-          noteId.replace(/^#/, ''),
-          `note-${noteId}`,
-          `#${noteId}`
-        ];
-
-        let noteElement: Element | null = null;
-        
-        // Try to find the element using different ID formats
-        for (const id of idVariations) {
-          try {
-            const safeId = typeof CSS !== 'undefined' && CSS.escape 
-              ? CSS.escape(id) 
-              : id.replace(/([:\[\].#])/g, '\\$1');
-            
-            // Try exact ID match
-            noteElement = containerRef.current.querySelector(`[id="${safeId}"]`);
-            if (noteElement) break;
-            
-            // Try without escaping (in case CSS.escape is too strict)
-            noteElement = containerRef.current.querySelector(`[id="${id}"]`);
-            if (noteElement) break;
-            
-            // Try as attribute selector
-            noteElement = containerRef.current.querySelector(`#${safeId}`);
-            if (noteElement) break;
-          } catch (e) {
-            // Continue to next variation
-            continue;
-          }
-        }
-        
-        if (noteElement) {
-          // Add the main note element
-          noteElement.classList.add('playing');
-          highlightedElements.push(noteElement);
-          
-          // Find the note group (chord container)
-          let noteGroup: Element | null = null;
-          let current: Element | null = noteElement;
-          
-          // Walk up the DOM to find the note group
-          while (current && current !== containerRef.current) {
-            if (current instanceof SVGElement || current instanceof HTMLElement) {
-              const classList = current.classList;
-              if (classList && (classList.contains('note') || current.tagName === 'g')) {
-                // Check if this group contains multiple notes (chord)
-                const notesInGroup = current.querySelectorAll('[id*="note"], g.note, use[class*="notehead"]');
-                if (notesInGroup.length > 1 || classList.contains('note')) {
-                  noteGroup = current;
-                  break;
-                }
-              }
-            }
-            current = current.parentElement;
-          }
-          
-          // If we found a note group (chord), highlight all notes in it
-          if (noteGroup && !processedNoteGroups.has(noteGroup.id || noteGroup.getAttribute('id') || '')) {
-            const groupId = noteGroup.id || noteGroup.getAttribute('id') || '';
-            processedNoteGroups.add(groupId);
-            
-            // Find all note elements in this chord group
-            const allNotesInGroup = noteGroup.querySelectorAll('g[id*="note"], [id*="note"]');
-            allNotesInGroup.forEach(note => {
-              if (!highlightedElements.includes(note)) {
-                note.classList.add('playing');
-                highlightedElements.push(note);
-              }
-            });
-            
-            // Also find all visual child elements that represent notes
-            const visualElements = noteGroup.querySelectorAll('use, path, ellipse, circle, rect');
-            visualElements.forEach(el => {
-              if (!highlightedElements.includes(el)) {
-                el.classList.add('playing');
-                highlightedElements.push(el);
-              }
-            });
-          } else {
-            // For single notes, highlight all visual child elements
-            const visualElements = noteElement.querySelectorAll('use, path, ellipse, circle, rect');
-            visualElements.forEach(el => {
-              if (!highlightedElements.includes(el)) {
-                el.classList.add('playing');
-                highlightedElements.push(el);
-              }
-            });
-            
-            // Also check parent group for additional note elements (siblings in chord)
-            const parentGroup = noteElement.parentElement;
-            if (parentGroup) {
-              const parentClassList = parentGroup.classList;
-              if (parentClassList && parentClassList.contains('note')) {
-                const siblingNotes = parentGroup.querySelectorAll('[id*="note"]');
-                siblingNotes.forEach(sibling => {
-                  if (!highlightedElements.includes(sibling) && sibling !== noteElement) {
-                    sibling.classList.add('playing');
-                    highlightedElements.push(sibling);
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
-
-      return highlightedElements;
-    } catch (err) {
-      console.warn('Verovio highlighting failed', err);
-      return [];
-    }
-  };
-
-  const highlightFallback = (): Element[] => {
-    if (!containerRef.current || noteElementsRef.current.length === 0) return [];
-
-    if (fallbackNoteIndexRef.current >= noteElementsRef.current.length) {
-      fallbackNoteIndexRef.current = 0;
-    }
-
-    const target = noteElementsRef.current[fallbackNoteIndexRef.current];
-    fallbackNoteIndexRef.current += 1;
-
-    if (!target) return [];
-
-    const highlighted = new Set<Element>();
-
-    applyHighlightToElement(target, highlighted);
-
-    const parentNoteGroup = target.closest('[id^="note"]');
-    if (parentNoteGroup) {
-      const siblingShapes = parentNoteGroup.querySelectorAll('use, path, ellipse, circle');
-      siblingShapes.forEach(el => {
-        if (el !== target) {
-          applyHighlightToElement(el, highlighted);
-        }
-      });
-    }
-
-    return Array.from(highlighted);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && stopTimeoutRef.current !== null) {
-        window.clearTimeout(stopTimeoutRef.current);
-        stopTimeoutRef.current = null;
-      }
-
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-
-      scheduledPartsRef.current.forEach(part => {
-        part.stop();
-        part.dispose();
-      });
-      scheduledPartsRef.current = [];
-
-      Tone.getTransport().stop();
-      Tone.getTransport().cancel(0);
-      Tone.getDraw().cancel();
-
-      clearHighlightedNotes();
-
-      if (samplerRef.current) {
-        samplerRef.current.releaseAll();
-      }
-
-      disposeFxNodes();
-    };
-  }, []);
-
-  // Render MusicXML with Verovio
-  useEffect(() => {
-    if (!musicxml || !containerRef.current) return;
-
-    const renderMusic = () => {
-      if (!containerRef.current) return;
-
+    const loadOSMD = async () => {
       try {
         setLoading(true);
-        
-        const tk = new verovio.toolkit();
-        verovioRef.current = tk;
-        
-        // Get the actual container width (wait for layout to be ready)
-        const container = containerRef.current.parentElement;
-        const containerWidth = container?.clientWidth || 1600;
-        
-        // Calculate pageWidth based on zoom - smaller zoom = more measures per line
-        // Higher zoom = fewer measures per line (wraps to next line)
-        const baseWidth = Math.max(containerWidth - 40, 1200);
-        const adjustedPageWidth = Math.floor(baseWidth * (50 / zoom));
-        
-        tk.setOptions({
-          scale: zoom, // Use zoom as scale - this affects note size
-          pageWidth: adjustedPageWidth, // Adjust page width inversely to zoom
-          adjustPageHeight: true,
-          breaks: 'auto', // Auto break measures to fit width
+        setError(null);
+
+        // Dynamic import of OSMD modules
+        const OSMDModule = await import('@osmd/OpenSheetMusicDisplay/OpenSheetMusicDisplay');
+        const PlaybackModule = await import('@osmd/Playback');
+        const OptionsModule = await import('@osmd/OpenSheetMusicDisplay/OSMDOptions');
+
+        if (!OSMDModule?.OpenSheetMusicDisplay || !PlaybackModule?.PlaybackManager) {
+          throw new Error('OSMD library modules not found. Please ensure OSMD is built.');
+        }
+
+        const OSMD = OSMDModule.OpenSheetMusicDisplay;
+        const PM = PlaybackModule.PlaybackManager;
+        const LTS = PlaybackModule.LinearTimingSource;
+        const BAP = PlaybackModule.BasicAudioPlayer;
+        const BT = OptionsModule.BackendType;
+
+        // Create OSMD instance
+        const osmd = new OSMD(containerRef.current, {
+          autoResize: true,
+          backend: BT.SVG,
+          disableCursor: false,
+          drawingParameters: 'default',
+          drawPartNames: true,
+          drawFingerings: true,
+          coloringEnabled: true,
         });
 
-        tk.loadData(musicxml);
-        
-        // Get the total number of pages
-        const pageCount = tk.getPageCount();
-        
-        // Render all pages and combine them
-        let allSvg = '';
-        for (let i = 1; i <= pageCount; i++) {
-          allSvg += tk.renderToSVG(i);
-        }
-        
-        if (containerRef.current) {
-          containerRef.current.innerHTML = allSvg;
-          clearHighlightedNotes();
-          
-          // Make all SVGs fill the width for responsive display
-          const svgElements = containerRef.current.querySelectorAll('svg');
-          svgElements.forEach((svgElement: Element) => {
-            if (svgElement instanceof SVGElement) {
-              svgElement.style.width = '100%';
-              svgElement.style.height = 'auto';
-              svgElement.style.display = 'block';
-              svgElement.style.marginBottom = '1rem';
-            }
-          });
+        osmdRef.current = osmd;
 
-          noteElementsRef.current = Array.from(
-            containerRef.current.querySelectorAll('[id^="note"] use, use[class*="note"], use[class*="notehead"], path[class*="note"], ellipse[class*="note"], circle[class*="note"]')
-          );
-
-          if (noteElementsRef.current.length === 0) {
-            noteElementsRef.current = Array.from(
-              containerRef.current.querySelectorAll('use, path, rect, ellipse, circle')
-            );
-          }
-
-          fallbackNoteIndexRef.current = 0;
-        }
+        // Initialize playback manager
+        const timingSource = new LTS();
+        const audioPlayer = new BAP();
+        const playbackManager = new PM(timingSource, undefined, audioPlayer, undefined);
         
+        playbackManager.DoPlayback = true;
+        playbackManager.DoPreCount = false;
+        
+        timingSourceRef.current = timingSource;
+        playbackManagerRef.current = playbackManager;
+        setOsmdReady(true);
+
         setLoading(false);
-      } catch {
-        setError('Failed to render music notation');
+      } catch (err: any) {
+        console.error('Failed to load OSMD', err);
+        setError(err.message || 'Failed to load music display library. Please ensure OSMD is built in osmd-extended-master folder.');
         setLoading(false);
       }
     };
 
-    // Wait a tick for the DOM to be ready
-    setTimeout(renderMusic, 0);
-  }, [musicxml, zoom]);
+    loadOSMD();
+  }, []);
 
-  // Play MusicXML or MIDI with high-quality piano and note highlighting
+  // Load and render MusicXML
+  useEffect(() => {
+    if (!musicxml || !containerRef.current || !osmdRef.current || !osmdReady) return;
+
+    const loadMusic = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const osmd = osmdRef.current;
+        
+        // Load MusicXML
+        await osmd.load(musicxml);
+        
+        // Initialize playback if sheet is loaded
+        if (osmd.Sheet && playbackManagerRef.current && timingSourceRef.current) {
+          const playbackManager = playbackManagerRef.current;
+          const timingSource = timingSourceRef.current;
+          
+          timingSource.reset();
+          timingSource.pause();
+          timingSource.Settings = osmd.Sheet.playbackSettings;
+          playbackManager.initialize(osmd.Sheet.musicPartManager);
+          playbackManager.addListener(osmd.cursor);
+          playbackManager.reset();
+          
+          osmd.PlaybackManager = playbackManager;
+        }
+        
+        // Render the sheet music
+        await osmd.render();
+
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Failed to render music', err);
+        setError(err.message || 'Failed to render music notation');
+        setLoading(false);
+      }
+    };
+
+    loadMusic();
+  }, [musicxml, osmdReady]);
+
   const handlePlay = async () => {
-    if (instrumentLoading) return;
-
-    try {
-      await Tone.start();
-      const sampler = await ensureSampler();
-      setError(null);
-
-      // Reset transport, visuals, and scheduling before a fresh playback
-      Tone.getTransport().stop();
-      Tone.getTransport().cancel(0);
-      Tone.getDraw().cancel();
-      Tone.getTransport().position = 0;
-
-      clearHighlightedNotes();
-
-      if (stopTimeoutRef.current !== null) {
-        window.clearTimeout(stopTimeoutRef.current);
-        stopTimeoutRef.current = null;
+    if (playbackManagerRef.current) {
+      try {
+        await playbackManagerRef.current.play();
+        setIsPlaying(true);
+      } catch (err) {
+        console.error('Playback error', err);
+        setError('Failed to start playback');
       }
+    }
+  };
 
-      scheduledPartsRef.current.forEach(part => part.dispose());
-      scheduledPartsRef.current = [];
-
-      if (containerRef.current && noteElementsRef.current.length === 0) {
-        noteElementsRef.current = Array.from(
-          containerRef.current.querySelectorAll('[id^="note"] use, use[class*="note"], use[class*="notehead"], path[class*="note"], ellipse[class*="note"], circle[class*="note"]')
-        );
-
-        if (noteElementsRef.current.length === 0) {
-          noteElementsRef.current = Array.from(
-            containerRef.current.querySelectorAll('use, path, rect, ellipse, circle')
-          );
-        }
-      }
-
-      fallbackNoteIndexRef.current = 0;
-
-      let midi: Midi;
-
-      if (midiFile) {
-        // If we have a MIDI file, use it directly
-        const arrayBuffer = await midiFile.arrayBuffer();
-        midi = new Midi(arrayBuffer);
-      } else if (musicxml && verovioRef.current) {
-        // Convert MusicXML to MIDI using Verovio
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const midiBase64 = (verovioRef.current as any).renderToMIDI() as string;
-        const midiData = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
-        midi = new Midi(midiData.buffer);
-      } else {
-        setError('No music data to play');
+  const handlePause = async () => {
+    if (playbackManagerRef.current) {
+      try {
+        await playbackManagerRef.current.pause();
         setIsPlaying(false);
-        return;
+      } catch (err) {
+        console.error('Pause error', err);
       }
-
-      const uniqueTimes = Array.from(
-        new Set(
-          midi.tracks.flatMap(track =>
-            track.notes.map(note => Math.round(note.time * 1000) / 1000)
-          )
-        )
-      ).sort((a, b) => a - b);
-
-      midi.tracks.forEach(track => {
-        if (track.notes.length === 0) return; // Skip empty tracks
-
-        const part = new Tone.Part((time: number, note: { name: string; duration: number; velocity: number }) => {
-          // Scale velocity for more dynamic range (0.3 to 1.0 instead of 0 to 1)
-          const scaledVelocity = 0.3 + (note.velocity * 0.7);
-
-          // Play note with Sampler - triggerAttackRelease(note, duration, time, velocity)
-          sampler.triggerAttackRelease(note.name, note.duration, time, scaledVelocity);
-        }, track.notes.map(note => ({
-          time: note.time,
-          name: note.name,
-          duration: note.duration,
-          velocity: note.velocity
-        })));
-
-        part.start(0);
-        scheduledPartsRef.current.push(part as unknown as TonePartHandle);
-      });
-
-      // Create a continuous highlight loop for smooth updates
-      let lastHighlightTime = -1;
-      const highlightLoop = () => {
-        const transportState = Tone.getTransport().state;
-        if (transportState !== 'started') {
-          return;
-        }
-        
-        const currentTime = Tone.getTransport().seconds;
-        
-        // Update highlights frequently for smoother experience (every 50ms)
-        if (Math.abs(currentTime - lastHighlightTime) >= 0.05 || lastHighlightTime < 0) {
-          clearHighlightedNotes();
-          
-          // Use Verovio's getElementsAtTime with current playback time
-          const highlighted = highlightUsingVerovio(currentTime);
-          const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
-          
-          // Update vertical line position (smooth animation)
-          if (toHandle.length > 0) {
-            updateOverlayPosition(toHandle);
-            
-            // Continuously scroll to keep position visible
-            scrollHighlightedIntoView(toHandle);
-          }
-          
-          lastHighlightTime = currentTime;
-        }
-        
-        // Continue the loop only if transport is still started
-        if (Tone.getTransport().state === 'started') {
-          Tone.getDraw().schedule(highlightLoop, Tone.now() + 0.05);
-        }
-      };
-
-      // Schedule highlight updates at note times AND continuously
-      const highlightPart = new Tone.Part((time: number, event: { highlightTime: number }) => {
-        Tone.getDraw().schedule(() => {
-          clearHighlightedNotes();
-          const highlighted = highlightUsingVerovio(event.highlightTime);
-          const toHandle = highlighted.length > 0 ? highlighted : highlightFallback();
-          updateOverlayPosition(toHandle);
-          scrollHighlightedIntoView(toHandle);
-        }, time);
-      }, uniqueTimes.map(highlightTime => ({
-        time: highlightTime,
-        highlightTime
-      })));
-
-      // Start continuous highlight loop
-      Tone.getDraw().schedule(highlightLoop, 0);
-
-      highlightPart.start(0);
-      scheduledPartsRef.current.push(highlightPart as unknown as TonePartHandle);
-
-      Tone.getTransport().start();
-      setIsPlaying(true);
-
-      if (typeof window !== 'undefined') {
-        stopTimeoutRef.current = window.setTimeout(() => {
-          handleStop();
-        }, midi.duration * 1000 + 300);
-      }
-    } catch (err) {
-      console.error('Playback error:', err);
-      setError('Failed to play music');
-      handleStop();
     }
   };
 
   const handleStop = () => {
-    Tone.getTransport().stop();
-    Tone.getTransport().position = 0;
-    Tone.getTransport().cancel(0);
-    Tone.getDraw().cancel();
-
-    scheduledPartsRef.current.forEach(part => {
-      part.stop();
-      part.dispose();
-    });
-    scheduledPartsRef.current = [];
-
-    if (typeof window !== 'undefined' && stopTimeoutRef.current !== null) {
-      window.clearTimeout(stopTimeoutRef.current);
-      stopTimeoutRef.current = null;
-    }
-
-    fallbackNoteIndexRef.current = 0;
-
-    if (samplerRef.current) {
-      samplerRef.current.releaseAll(Tone.now());
-    }
-    
-    // Clear all note highlights
-    clearHighlightedNotes();
-    
-    // Hide the playback line
-    if (overlayRef.current) {
-      overlayRef.current.style.opacity = '0';
-    }
-
-    // Reset animation frame
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    // Reset position
-    currentPositionRef.current = { x: 0, targetX: 0 };
-    
-    // Reset overlay position
-    if (overlayRef.current) {
-      overlayRef.current.style.left = '0px';
-    }
-
-    setIsPlaying(false);
-  };
-
-  const handlePlayPause = () => {
-    if (isPlaying) {
-      // Pause
-      Tone.getTransport().pause();
-      setIsPlaying(false);
-    } else if (Tone.getTransport().state === 'paused') {
-      // Resume from pause
-      Tone.getTransport().start();
-      setIsPlaying(true);
-    } else {
-      // Start from beginning
-      void handlePlay();
+    if (playbackManagerRef.current) {
+      try {
+        playbackManagerRef.current.reset();
+        setIsPlaying(false);
+      } catch (err) {
+        console.error('Stop error', err);
+      }
     }
   };
 
   return (
     <div>
-      {/* Zoom Slider */}
-      {showZoomSlider && (
-        <div className="mb-4 sm:mb-6 bg-purple-900/50 rounded-lg p-3 sm:p-4 border border-purple-400/30">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-            <span className="text-white text-sm font-semibold">Size: {zoom}</span>
-            <div className="flex items-center gap-2 flex-1">
-              <button
-                onClick={() => setZoom(Math.max(20, zoom - 5))}
-                className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
-              >
-                −
-              </button>
-              <input
-                type="range"
-                min="20"
-                max="100"
-                step="5"
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="flex-1 h-2 bg-purple-300/30 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-              <button
-                onClick={() => setZoom(Math.min(100, zoom + 5))}
-                className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
-              >
-                +
-              </button>
-            </div>
-            <button
-              onClick={() => setZoom(35)}
-              className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm transition-colors flex-shrink-0"
-            >
-              Reset
-            </button>
-          </div>
-          <p className="text-xs text-purple-300 mt-2">
-            Lower values fit more measures per line • Higher values make notes larger
-          </p>
-        </div>
-      )}
-
-      {/* Sheet Music Display - scrollbar hidden but scrollable */}
+      {/* Sheet Music Display */}
       <div className="bg-white rounded-lg p-4 border-2 border-purple-400/50 max-h-[80vh] relative overflow-hidden">
         <div 
-          className="overflow-y-auto overflow-x-hidden h-full scrollbar-hide touch-pan-y"
+          className="overflow-y-auto overflow-x-hidden h-full scrollbar-hide"
           style={{
-            scrollbarWidth: 'none', /* Firefox */
-            msOverflowStyle: 'none', /* IE and Edge */
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           }}
         >
           {loading && (
@@ -838,105 +207,45 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
           )}
           
           {error && (
-            <div className="text-center text-red-500 py-8">
-              {error}
+            <div className="text-center text-red-500 py-8 px-4">
+              <p className="font-semibold mb-2">Error:</p>
+              <p className="text-sm">{error}</p>
             </div>
           )}
           
-          <div ref={wrapperRef} className="relative w-full min-h-[200px]">
-            <div ref={containerRef} className="w-full min-h-[200px]" />
-            {/* Vertical playback line indicator */}
-            <div
-              ref={overlayRef}
-              className="pointer-events-none absolute top-0 left-0 bg-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.8)] opacity-0 transition-opacity duration-100 ease-out"
-              style={{ width: 0, height: 0 }}
-            />
-          </div>
+          <div ref={containerRef} className="w-full min-h-[200px]" />
         </div>
 
-        {/* Floating Control Overlay - Always visible at bottom center */}
+        {/* Playback Controls */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
           <div className="bg-purple-900/80 backdrop-blur-sm rounded-full px-4 py-2 border border-purple-400/50 shadow-lg flex items-center gap-3">
-            {/* Play/Pause Button */}
             <button
-              onClick={handlePlayPause}
-              disabled={loading || instrumentLoading}
+              onClick={isPlaying ? handlePause : handlePlay}
+              disabled={loading || !musicxml || !!error || !osmdReady}
               className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900/50 disabled:cursor-not-allowed transition-colors"
-              title={instrumentLoading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}
+              title={isPlaying ? 'Pause' : 'Play'}
             >
-              {instrumentLoading ? (
-                <span className="text-white text-xl">⏳</span>
-              ) : isPlaying ? (
-                <span className="text-white text-xl">⏸️</span>
-              ) : (
-                <span className="text-white text-xl">▶️</span>
-              )}
+              <span className="text-white text-xl">
+                {isPlaying ? '⏸️' : '▶️'}
+              </span>
             </button>
             
-            {/* Stop Button */}
             <button
               onClick={handleStop}
-              disabled={!isPlaying && Tone.getTransport().state !== 'paused'}
+              disabled={!isPlaying || loading}
               className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900/50 disabled:cursor-not-allowed transition-colors"
               title="Stop"
             >
               <span className="text-white text-xl">⏹️</span>
             </button>
-
-            {/* Zoom Button */}
-            <button
-              onClick={() => setShowZoomSlider(!showZoomSlider)}
-              className="p-2 rounded-full bg-purple-700 hover:bg-purple-600 transition-colors"
-              title="Adjust Zoom"
-            >
-              <span className="text-white text-xl">🔍</span>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Attribution */}
-      <div className="text-xs text-purple-300 mt-4 text-center">
-        Rendered with{' '}
-        <a 
-          href="https://www.verovio.org" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-blue-400 hover:underline"
-        >
-          Verovio
-        </a>
-        {' '}(LGPL 3.0)
-      </div>
-
-      {/* CSS for hiding scrollbar and note highlighting */}
+      {/* CSS for hiding scrollbar */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
-        }
-        
-        /* Verovio note highlighting - targets all playing elements */
-        :global(.playing) {
-          fill: #a78bfa !important;
-        }
-        
-        :global(.playing path),
-        :global(.playing ellipse),
-        :global(.playing circle),
-        :global(.playing use),
-        :global(.playing rect) {
-          fill: #a78bfa !important;
-        }
-        
-        :global(g.note.playing) {
-          fill: #a78bfa !important;
-        }
-        
-        :global(g.note.playing path),
-        :global(g.note.playing ellipse),
-        :global(g.note.playing use),
-        :global(g.note.playing circle) {
-          fill: #a78bfa !important;
         }
       `}</style>
     </div>
