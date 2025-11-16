@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Transpile OSMD source files
+  transpilePackages: [],
+  
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -17,6 +20,19 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       '@osmd': path.resolve(__dirname, '../osmd-extended-master/src'),
     };
+    
+    // Ensure OSMD TypeScript files are processed
+    const osmdPath = path.resolve(__dirname, '../osmd-extended-master/src');
+    config.module.rules.push({
+      test: /\.tsx?$/,
+      include: [osmdPath],
+      use: {
+        loader: 'next/dist/compiled/babel/loader',
+        options: {
+          presets: ['next/babel'],
+        },
+      },
+    });
     
     return config;
   },
