@@ -13,8 +13,9 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
   private channelVolumes: number[] = [];
   // private activeSamples: Map<number, any> = new Map();
   private piano: SoundfontPlayer.Player;
-  private activeNodes: Set<AudioNode> = new Set();
+  private activeNodes: Map<number, { node: AudioNode, endTime: number }> = new Map();
   private cleanupInterval: number | undefined;
+  private nodeIdCounter: number = 0;
 
   protected memoryLoadedSoundFonts: Map<MidiInstrument, SoundfontPlayer.Player> = new Map();
   protected channelToSoundFont: Map<number, number> = new Map();
@@ -34,10 +35,10 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
     if (this.SoundfontInstrumentOptions.nameToUrl === undefined) {
       this.SoundfontInstrumentOptions.nameToUrl = this.nameToSoundfontUrl;
     }
-    // Start periodic cleanup every 2 seconds
+    // Aggressive cleanup every 500ms for real-time performance
     this.cleanupInterval = window.setInterval(() => {
       this.cleanupOldNodes();
-    }, 2000);
+    }, 500);
   }
 
   public async open(uniqueInstruments: number[], numberOfinstruments: number = 16): Promise<void> {
@@ -90,32 +91,42 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
       { note: key, duration: lengthInMs / 1000, gain: sampleVolume * this.GainMultiplier },
     ]) as unknown as AudioNode;
 
-    // Track active nodes and clean up after note duration
+    // Track active nodes with their end times for time-based cleanup
     if (audioNode) {
-      this.activeNodes.add(audioNode);
-      setTimeout(() => {
-        this.activeNodes.delete(audioNode);
-        // More aggressive cleanup - clean up frequently to prevent memory buildup
-        if (this.activeNodes.size > 50) {
-          this.cleanupOldNodes();
-        }
-      }, lengthInMs + 100); // Add small buffer
+      const nodeId: number = this.nodeIdCounter++;
+      const endTime: number = this.ac.currentTime + (lengthInMs / 1000);
+      this.activeNodes.set(nodeId, { node: audioNode, endTime });
+
+      // Immediate cleanup when node limit is reached
+      if (this.activeNodes.size > 20) {
+        this.cleanupOldNodes();
+      }
     }
   }
 
   private cleanupOldNodes(): void {
-    // More aggressive cleanup - keep only the 30 most recent nodes
-    if (this.activeNodes.size > 30) {
-      const nodesToRemove: AudioNode[] = [];
-      let count: number = 0;
-      for (const node of this.activeNodes) {
-        if (count++ < this.activeNodes.size - 30) {
-          nodesToRemove.push(node);
-        } else {
-          break;
-        }
+    const currentTime: number = this.ac.currentTime;
+    const nodesToDelete: number[] = [];
+
+    // Remove all nodes that have finished playing
+    for (const [id, nodeData] of this.activeNodes) {
+      if (currentTime >= nodeData.endTime) {
+        nodesToDelete.push(id);
       }
-      nodesToRemove.forEach((node: AudioNode) => this.activeNodes.delete(node));
+    }
+
+    // Delete finished nodes
+    nodesToDelete.forEach((id: number) => this.activeNodes.delete(id));
+
+    // If still too many nodes, force delete oldest ones
+    if (this.activeNodes.size > 15) {
+      const sortedNodes: Array<[number, { node: AudioNode, endTime: number }]> = Array.from(this.activeNodes.entries())
+        .sort((a: [number, { node: AudioNode, endTime: number }], b: [number, { node: AudioNode, endTime: number }]) => a[1].endTime - b[1].endTime);
+
+      const toRemove: number = this.activeNodes.size - 15;
+      for (let i: number = 0; i < toRemove; i++) {
+        this.activeNodes.delete(sortedNodes[i][0]);
+      }
     }
   }
 
