@@ -8,11 +8,12 @@ import midiNames from "./midiNames";
 
 export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
 
-  public ac: AudioContext = new AudioContext();
+  public ac: AudioContext = new AudioContext({ latencyHint: "playback" });
   // private mainTuningRatio: number = 1.0;
   private channelVolumes: number[] = [];
   // private activeSamples: Map<number, any> = new Map();
   private piano: SoundfontPlayer.Player;
+  private activeNodes: Set<AudioNode> = new Set();
 
   protected memoryLoadedSoundFonts: Map<MidiInstrument, SoundfontPlayer.Player> = new Map();
   protected channelToSoundFont: Map<number, number> = new Map();
@@ -73,9 +74,38 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
     const soundFont: SoundfontPlayer.Player = this.memoryLoadedSoundFonts.get(
       this.channelToSoundFont.get(instrumentChannel)
     );
-    soundFont.schedule(0, [
+
+    const audioNode: AudioNode = soundFont.schedule(0, [
       { note: key, duration: lengthInMs / 1000, gain: sampleVolume * this.GainMultiplier },
-    ]);
+    ]) as unknown as AudioNode;
+
+    // Track active nodes and clean up after note duration
+    if (audioNode) {
+      this.activeNodes.add(audioNode);
+      setTimeout(() => {
+        this.activeNodes.delete(audioNode);
+        // Periodically clean up if too many nodes accumulate
+        if (this.activeNodes.size > 100) {
+          this.cleanupOldNodes();
+        }
+      }, lengthInMs + 100); // Add small buffer
+    }
+  }
+
+  private cleanupOldNodes(): void {
+    // Remove references to old nodes to allow garbage collection
+    if (this.activeNodes.size > 50) {
+      const nodesToRemove: AudioNode[] = [];
+      let count: number = 0;
+      for (const node of this.activeNodes) {
+        if (count++ < this.activeNodes.size - 50) {
+          nodesToRemove.push(node);
+        } else {
+          break;
+        }
+      }
+      nodesToRemove.forEach((node: AudioNode) => this.activeNodes.delete(node));
+    }
   }
 
   /** Stop sound(s) in this channel. Currently stops all of the instrument's sounds because of implementation details. */

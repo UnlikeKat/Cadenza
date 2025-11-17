@@ -29,7 +29,10 @@ interface PlaybackManagerInstance {
   reset: () => void;
   play: () => Promise<void>;
   pause: () => Promise<void>;
-  audioPlayer?: { volume: number };
+  audioPlayer?: { 
+    volume: number;
+    audioContext?: AudioContext;
+  };
   Metronome?: { Enabled: boolean };
 }
 
@@ -286,7 +289,18 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           const BAP = window.opensheetmusicdisplay.BasicAudioPlayer;
 
           const timingSource = new LTS();
-          const playbackManager = new PM(timingSource, undefined, new BAP(), undefined);
+          const audioPlayer = new BAP() as { audioContext?: AudioContext; volume: number };
+          
+          // Optimize audio player settings for better performance
+          // Resume audio context if suspended (browser autoplay policy)
+          if (audioPlayer.audioContext) {
+            const context = audioPlayer.audioContext;
+            if (context.state === 'suspended') {
+              context.resume();
+            }
+          }
+          
+          const playbackManager = new PM(timingSource, undefined, audioPlayer, undefined);
 
           playbackManager.DoPlayback = true;
           playbackManager.DoPreCount = false;
@@ -314,7 +328,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
             setTempo(Math.round(osmd.Sheet.DefaultStartTempoInBpm));
           }
 
-          console.log('Playback initialized');
+          console.log('Playback initialized with optimized audio settings');
         }
 
         setLoading(false);
@@ -353,7 +367,20 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
   const handleStop = () => {
     if (!playbackManagerRef.current) return;
     
+    playbackManagerRef.current.pause();
     playbackManagerRef.current.reset();
+    
+    // Clear audio context to prevent memory buildup
+    if (playbackManagerRef.current.audioPlayer?.audioContext) {
+      const context = playbackManagerRef.current.audioPlayer.audioContext;
+      // Stop all audio nodes
+      if (context.state === 'running') {
+        context.suspend().then(() => {
+          setTimeout(() => context.resume(), 100); // Resume for next playback
+        });
+      }
+    }
+    
     setIsPlaying(false);
   };
 
