@@ -50,6 +50,18 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
       );
     }
 
+    // Preload all unique instruments to avoid lag during playback
+    if (uniqueInstruments && uniqueInstruments.length > 0) {
+      const preloadPromises: Array<Promise<SoundfontPlayer.Player>> = [];
+      for (const instrumentId of uniqueInstruments) {
+        if (this.memoryLoadedSoundFonts.get(instrumentId) === undefined) {
+          preloadPromises.push(this.loadSoundFont(instrumentId));
+        }
+      }
+      // Wait for all instruments to be preloaded
+      await Promise.all(preloadPromises);
+    }
+
     for (let i: number = 0; i < numberOfinstruments; i++) {
       this.channelVolumes[i] = 0.8;
     }

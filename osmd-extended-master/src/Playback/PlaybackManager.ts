@@ -329,7 +329,7 @@ export class PlaybackManager implements IPlaybackParametersListener {
         this.audioPlayer.stopSound(channel, 0);
     }
 
-    public initialize(musicPartMng: MusicPartManager): void {
+    public async initialize(musicPartMng: MusicPartManager): Promise<void> {
         // lock(this.playbackThreadSyncObject) {
         if (this.isInitialized) {
             this.stopAllCurrentlyPlayingNotes();
@@ -355,7 +355,16 @@ export class PlaybackManager implements IPlaybackParametersListener {
             if (this.audioPlayer !== undefined) {
                 const uniqueMidiInstruments: MidiInstrument[] = Array.from(new Set(musicSheet.Instruments.map(item => item.MidiInstrumentId)));
 
-                this.audioPlayer.open(uniqueMidiInstruments, 16);
+                // Add percussion and metronome to preload list for smooth playback
+                if (!uniqueMidiInstruments.includes(MidiInstrument.Percussion)) {
+                    uniqueMidiInstruments.push(MidiInstrument.Percussion);
+                }
+                if (!uniqueMidiInstruments.includes(MidiInstrument.Woodblock)) {
+                    uniqueMidiInstruments.push(MidiInstrument.Woodblock);
+                }
+
+                // Await instrument preloading for smooth playback
+                await this.audioPlayer.open(uniqueMidiInstruments, 16);
                 // set drums:
                 // TODO don't load drums in non-drum sheets
                 this.audioPlayer.setSound(this.percussionChannel, MidiInstrument.Percussion).then(() => {

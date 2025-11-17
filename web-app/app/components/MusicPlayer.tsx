@@ -64,6 +64,7 @@ declare global {
 export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingInstruments, setLoadingInstruments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const osmdRef = useRef<OSMDInstance | null>(null);
   const playbackManagerRef = useRef<PlaybackManagerInstance | null>(null);
@@ -284,6 +285,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
 
         // Initialize playback if available
         if (window.opensheetmusicdisplay?.PlaybackManager) {
+          setLoadingInstruments(true);
           const PM = window.opensheetmusicdisplay.PlaybackManager;
           const LTS = window.opensheetmusicdisplay.LinearTimingSource;
           const BAP = window.opensheetmusicdisplay.BasicAudioPlayer;
@@ -312,7 +314,8 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           }
           
           if (osmd.Sheet?.musicPartManager) {
-            playbackManager.initialize(osmd.Sheet.musicPartManager);
+            // Initialize will trigger instrument preloading
+            await playbackManager.initialize(osmd.Sheet.musicPartManager);
           }
           if (osmd.cursor) {
             playbackManager.addListener(osmd.cursor);
@@ -328,7 +331,8 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
             setTempo(Math.round(osmd.Sheet.DefaultStartTempoInBpm));
           }
 
-          console.log('Playback initialized with optimized audio settings');
+          setLoadingInstruments(false);
+          console.log('Playback initialized with preloaded instruments');
         }
 
         setLoading(false);
@@ -416,6 +420,14 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
 
   return (
     <div className="w-full flex flex-col gap-4">
+      {/* Instrument Loading Indicator */}
+      {loadingInstruments && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+          <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+          <span className="text-sm text-blue-700 font-medium">Preloading instruments for smooth playback...</span>
+        </div>
+      )}
+      
       {/* Playback Controls */}
       <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -423,7 +435,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
           <div className="flex gap-2">
             <button
               onClick={handlePlayPause}
-              disabled={!playbackManagerRef.current || loading}
+              disabled={!playbackManagerRef.current || loading || loadingInstruments}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white rounded-lg transition-colors flex items-center gap-2"
               title={isPlaying ? 'Pause' : 'Play'}
             >
@@ -442,7 +454,7 @@ export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
 
             <button
               onClick={handleStop}
-              disabled={!playbackManagerRef.current || loading}
+              disabled={!playbackManagerRef.current || loading || loadingInstruments}
               className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white rounded-lg transition-colors"
               title="Stop"
             >
