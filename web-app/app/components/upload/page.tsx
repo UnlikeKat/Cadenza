@@ -25,13 +25,8 @@ export default function UploadPage() {
       setMusicxml(text);
       setFileType('musicxml');
       setFile(selectedFile);
-    } else if (extension === 'mid' || extension === 'midi') {
-      // MIDI file
-      setFileType('midi');
-      setFile(selectedFile);
-      setMusicxml(null);
     } else {
-      alert('Please upload a MusicXML (.xml) or MIDI (.mid) file');
+      alert('Please upload a MusicXML (.xml) file');
     }
   };
 
@@ -46,11 +41,11 @@ export default function UploadPage() {
         <div className="bg-gray-800 rounded-lg p-8 mb-8">
           <label className="block mb-4">
             <span className="text-xl font-semibold mb-4 block">
-              Choose a MusicXML or MIDI file
+              Choose a MusicXML file
             </span>
             <input
               type="file"
-              accept=".xml,.musicxml,.mid,.midi"
+              accept=".xml,.musicxml"
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-400
                 file:mr-4 file:py-2 file:px-4
@@ -73,7 +68,6 @@ export default function UploadPage() {
         {file && (
           <MusicPlayer 
             musicxml={musicxml || undefined}
-            midiFile={fileType === 'midi' ? file : undefined}
           />
         )}
 
@@ -82,7 +76,7 @@ export default function UploadPage() {
           <div className="bg-gray-800 rounded-lg p-8 border-2 border-dashed border-gray-700">
             <h2 className="text-2xl font-bold mb-4">How to use</h2>
             <ol className="space-y-3 text-gray-400">
-              <li>1. 📂 Click above to upload a MusicXML or MIDI file</li>
+              <li>1. 📂 Click above to upload a MusicXML file</li>
               <li>2. 🎼 The sheet music will be displayed automatically</li>
               <li>3. ▶️ Click &quot;Play&quot; to hear the music</li>
               <li>4. 🎹 Follow along with the highlighted notes</li>

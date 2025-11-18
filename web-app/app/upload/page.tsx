@@ -29,13 +29,8 @@ export default function UploadPage() {
       setMusicxml(text);
       setFileType('musicxml');
       setFile(selectedFile);
-    } else if (extension === 'mid' || extension === 'midi') {
-      // MIDI file
-      setFileType('midi');
-      setFile(selectedFile);
-      setMusicxml(null);
     } else {
-      alert('Please upload a MusicXML (.xml) or MIDI (.mid) file');
+      alert('Please upload a MusicXML (.xml) file');
     }
   };
 
@@ -147,7 +142,7 @@ export default function UploadPage() {
               </label>
 
               <p className="text-sm text-gray-400 mt-4">
-                Supported formats: MusicXML (.xml, .musicxml), MIDI (.mid, .midi)
+                Supported formats: MusicXML (.xml, .musicxml)
               </p>
 
               {file && (
@@ -170,7 +165,6 @@ export default function UploadPage() {
             <CardContent className="p-6">
               <MusicPlayer 
                 musicxml={musicxml || undefined}
-                midiFile={fileType === 'midi' ? file : undefined}
               />
             </CardContent>
           </Card>
@@ -191,7 +185,7 @@ export default function UploadPage() {
                   <div>
                     <h3 className="font-semibold text-lg mb-1 text-white">1. Upload Your File</h3>
                     <p className="text-gray-400">
-                      Drag & drop or browse for a MusicXML or MIDI file
+                      Drag & drop or browse for a MusicXML file
                     </p>
                   </div>
                 </div>

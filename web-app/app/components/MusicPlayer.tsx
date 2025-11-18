@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { convertMusicXmlForOsmd } from '@/lib/musicxml';
-import { convertMidiToMusicXml } from '@/lib/midiToMusicXml';
 
 interface MusicPlayerProps {
   musicxml?: string;
-  midiFile?: File;
 }
 
 interface OSMDInstance {
@@ -62,7 +60,7 @@ declare global {
   }
 }
 
-export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
+export default function MusicPlayer({ musicxml }: MusicPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [loadingInstruments, setLoadingInstruments] = useState(false);
@@ -137,30 +135,16 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
 
   // Load and render MusicXML with playback
   useEffect(() => {
-    if ((!musicxml && !midiFile) || !containerRef.current || !osmdRef.current || !osmdReady) return;
+    if (!musicxml || !containerRef.current || !osmdRef.current || !osmdReady) return;
 
     const loadMusic = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        let xmlToLoad = '';
-
-        if (midiFile) {
-          try {
-            xmlToLoad = await convertMidiToMusicXml(midiFile);
-            console.log('Converted MIDI to MusicXML');
-          } catch (err) {
-            console.error('MIDI conversion error:', err);
-            throw new Error('Failed to convert MIDI file to MusicXML');
-          }
-        } else if (musicxml) {
-          xmlToLoad = musicxml.trim();
-        }
-
         // Process the XML
-        const trimmedXml = xmlToLoad.trim();
-        xmlToLoad = trimmedXml;
+        const trimmedXml = musicxml.trim();
+        let xmlToLoad = trimmedXml;
 
         if (!trimmedXml.startsWith('<?xml')) {
           const rootMatch = trimmedXml.match(/<(\w+:)?score-partwise|<(\w+:)?score-timewise/);
@@ -365,7 +349,7 @@ export default function MusicPlayer({ musicxml, midiFile }: MusicPlayerProps) {
     };
 
     loadMusic();
-  }, [musicxml, midiFile, osmdReady, zoom]);
+  }, [musicxml, osmdReady, zoom]);
 
   const handlePlayPause = async () => {
     if (!playbackManagerRef.current) return;
