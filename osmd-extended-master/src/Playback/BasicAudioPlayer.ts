@@ -11,11 +11,7 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
   public ac: AudioContext = new AudioContext({ latencyHint: "playback" });
   // private mainTuningRatio: number = 1.0;
   private channelVolumes: number[] = [];
-  // private activeSamples: Map<number, any> = new Map();
   private piano: SoundfontPlayer.Player;
-  private activeNodes: Map<number, { node: AudioNode, endTime: number }> = new Map();
-  private cleanupInterval: number | undefined;
-  private nodeIdCounter: number = 0;
 
   protected memoryLoadedSoundFonts: Map<MidiInstrument, SoundfontPlayer.Player> = new Map();
   protected channelToSoundFont: Map<number, number> = new Map();
@@ -35,46 +31,32 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
     if (this.SoundfontInstrumentOptions.nameToUrl === undefined) {
       this.SoundfontInstrumentOptions.nameToUrl = this.nameToSoundfontUrl;
     }
-    // Aggressive cleanup every 500ms for real-time performance
-    this.cleanupInterval = window.setInterval(() => {
-      this.cleanupOldNodes();
-    }, 500);
   }
 
   public async open(uniqueInstruments: number[], numberOfinstruments: number = 16): Promise<void> {
+    // Piano-only optimization: only load acoustic grand piano
     if (this.piano === undefined) {
       this.piano = await SoundfontPlayer.instrument(
         this.ac as unknown as AudioContext,
         midiNames[MidiInstrument.Acoustic_Grand_Piano].toLowerCase() as any,
         this.SoundfontInstrumentOptions
       );
-    }
-
-    // Preload all unique instruments to avoid lag during playback
-    if (uniqueInstruments && uniqueInstruments.length > 0) {
-      const preloadPromises: Array<Promise<SoundfontPlayer.Player>> = [];
-      for (const instrumentId of uniqueInstruments) {
-        if (this.memoryLoadedSoundFonts.get(instrumentId) === undefined) {
-          preloadPromises.push(this.loadSoundFont(instrumentId));
-        }
-      }
-      // Wait for all instruments to be preloaded
-      await Promise.all(preloadPromises);
+      // Map piano to all instruments for simplicity
+      this.memoryLoadedSoundFonts.set(MidiInstrument.Acoustic_Grand_Piano, this.piano);
     }
 
     for (let i: number = 0; i < numberOfinstruments; i++) {
       this.channelVolumes[i] = 0.8;
+      // Map all channels to piano
+      this.channelToSoundFont.set(i, MidiInstrument.Acoustic_Grand_Piano);
     }
   }
 
   public close(): void {
-    // Clear cleanup interval
-    if (this.cleanupInterval !== undefined) {
-      window.clearInterval(this.cleanupInterval);
+    // Stop all piano notes
+    if (this.piano) {
+      this.piano.stop();
     }
-    // Clear all active nodes
-    this.activeNodes.clear();
-    // _activeSamples.Clear();
   }
 
   public tuningChanged(tuningInHz: number): void {
@@ -95,91 +77,57 @@ export class BasicAudioPlayer implements IAudioPlayer<SoundfontPlayer.Player> {
       this.channelVolumes[instrumentChannel] * volume
     );
 
-    const soundFont: SoundfontPlayer.Player = this.memoryLoadedSoundFonts.get(
-      this.channelToSoundFont.get(instrumentChannel)
-    );
+    // Always use piano (piano-only optimization)
+    const soundFont: SoundfontPlayer.Player = this.piano;
 
-    const audioNode: AudioNode = soundFont.schedule(0, [
-      { note: key, duration: lengthInMs / 1000, gain: sampleVolume * this.GainMultiplier },
-    ]) as unknown as AudioNode;
-
-    // Track active nodes with their end times for time-based cleanup
-    if (audioNode) {
-      const nodeId: number = this.nodeIdCounter++;
-      const endTime: number = this.ac.currentTime + (lengthInMs / 1000);
-      this.activeNodes.set(nodeId, { node: audioNode, endTime });
-
-      // Immediate cleanup when node limit is reached
-      if (this.activeNodes.size > 20) {
-        this.cleanupOldNodes();
-      }
-    }
-  }
-
-  private cleanupOldNodes(): void {
-    const currentTime: number = this.ac.currentTime;
-    const nodesToDelete: number[] = [];
-
-    // Remove all nodes that have finished playing
-    for (const [id, nodeData] of this.activeNodes) {
-      if (currentTime >= nodeData.endTime) {
-        nodesToDelete.push(id);
-      }
+    if (!soundFont) {
+      console.warn("Piano not loaded yet");
+      return;
     }
 
-    // Delete finished nodes
-    nodesToDelete.forEach((id: number) => this.activeNodes.delete(id));
+    // Pre-schedule the note using soundfont-player's schedule method
+    // This handles the Web Audio API scheduling internally
+    const duration: number = lengthInMs / 1000;
+    const gain: number = sampleVolume * this.GainMultiplier;
 
-    // If still too many nodes, force delete oldest ones
-    if (this.activeNodes.size > 15) {
-      const sortedNodes: Array<[number, { node: AudioNode, endTime: number }]> = Array.from(this.activeNodes.entries())
-        .sort((a: [number, { node: AudioNode, endTime: number }], b: [number, { node: AudioNode, endTime: number }]) => a[1].endTime - b[1].endTime);
-
-      const toRemove: number = this.activeNodes.size - 15;
-      for (let i: number = 0; i < toRemove; i++) {
-        this.activeNodes.delete(sortedNodes[i][0]);
-      }
-    }
+    // Use schedule() with time=0 to play immediately at AudioContext.currentTime
+    // The soundfont-player will handle the scheduling via Web Audio API
+    soundFont.schedule(0, [
+      { note: key, duration, gain },
+    ]);
   }
 
   /** Stop sound(s) in this channel. Currently stops all of the instrument's sounds because of implementation details. */
   public stopSound(instrumentChannel: number, key: number): void {
-    const soundFont: SoundfontPlayer.Player = this.memoryLoadedSoundFonts.get(
-      this.channelToSoundFont.get(instrumentChannel)
-    );
-    soundFont?.stop();
-    // this is somewhat abrupt, but continuing to play long notes on pause button hit is worse.
-    // this will stop all notes in this channel. Otherwise we probably need a map of keys to AudioNode
+    // Piano-only: stop all piano notes
+    if (this.piano) {
+      this.piano.stop();
+    }
   }
 
   public async setSound(
     instrumentChannel: number,
     soundId: MidiInstrument,
   ): Promise<number> {
-    if (this.memoryLoadedSoundFonts.get(soundId) === undefined) {
-      await this.loadSoundFont(soundId);
-    }
-    this.channelToSoundFont.set(instrumentChannel, soundId);
+    // Piano-only optimization: always use piano regardless of requested instrument
+    this.channelToSoundFont.set(instrumentChannel, MidiInstrument.Acoustic_Grand_Piano);
     return instrumentChannel;
   }
 
   public async loadSoundFont(soundId: MidiInstrument): Promise<SoundfontPlayer.Player> {
-    if (this.memoryLoadedSoundFonts.get(soundId) !== undefined) {
-      return this.memoryLoadedSoundFonts.get(soundId);
+    // Piano-only optimization: always return piano
+    if (this.piano) {
+      return this.piano;
     }
 
-    let nameOrUrl: any = midiNames[soundId].toLowerCase();
-    if (soundId === MidiInstrument.Percussion) {
-      // percussion unfortunately doesn't exist in the original soundfonts
-      nameOrUrl = this.SoundfontInstrumentOptions.fromPercussion + "percussion-mp3.js";
-    }
-    const player: SoundfontPlayer.Player = await SoundfontPlayer.instrument(
+    // If piano not loaded yet, load it
+    this.piano = await SoundfontPlayer.instrument(
       this.ac,
-      nameOrUrl,
+      midiNames[MidiInstrument.Acoustic_Grand_Piano].toLowerCase() as any,
       this.SoundfontInstrumentOptions
     );
-    this.memoryLoadedSoundFonts.set(soundId, player);
-    return player;
+    this.memoryLoadedSoundFonts.set(MidiInstrument.Acoustic_Grand_Piano, this.piano);
+    return this.piano;
   }
 
   /** Returns the url for the instrument name's soundfont to be loaded. */

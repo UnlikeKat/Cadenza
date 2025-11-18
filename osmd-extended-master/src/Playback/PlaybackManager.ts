@@ -353,15 +353,8 @@ export class PlaybackManager implements IPlaybackParametersListener {
             this.playbackIterator = new PlaybackIterator(musicSheet);
 
             if (this.audioPlayer !== undefined) {
-                const uniqueMidiInstruments: MidiInstrument[] = Array.from(new Set(musicSheet.Instruments.map(item => item.MidiInstrumentId)));
-
-                // Add percussion and metronome to preload list for smooth playback
-                if (!uniqueMidiInstruments.includes(MidiInstrument.Percussion)) {
-                    uniqueMidiInstruments.push(MidiInstrument.Percussion);
-                }
-                if (!uniqueMidiInstruments.includes(MidiInstrument.Woodblock)) {
-                    uniqueMidiInstruments.push(MidiInstrument.Woodblock);
-                }
+                // Piano-only optimization: only load piano
+                const uniqueMidiInstruments: MidiInstrument[] = [MidiInstrument.Acoustic_Grand_Piano];
 
                 // Await instrument preloading for smooth playback
                 await this.audioPlayer.open(uniqueMidiInstruments, 16);
