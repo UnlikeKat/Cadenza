@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import JSZip from 'jszip';
 
 const MusicPlayer = dynamic(() => import('@/app/components/MusicPlayer'), {
   ssr: false,
@@ -25,8 +26,31 @@ export default function UploadPage() {
       setMusicxml(text);
       setFileType('musicxml');
       setFile(selectedFile);
+    } else if (extension === 'mxl') {
+      try {
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        
+        // Find the first XML file that isn't container.xml
+        const xmlFile = Object.values(zip.files).find(file => 
+          (file.name.endsWith('.xml') || file.name.endsWith('.musicxml')) && 
+          !file.name.includes('META-INF')
+        );
+
+        if (xmlFile) {
+          const text = await xmlFile.async('string');
+          setMusicxml(text);
+          setFileType('musicxml');
+          setFile(selectedFile);
+        } else {
+          alert('Invalid .mxl file: No MusicXML file found inside.');
+        }
+      } catch (error) {
+        console.error('Error reading .mxl file:', error);
+        alert('Error reading .mxl file. Please try again.');
+      }
     } else {
-      alert('Please upload a MusicXML (.xml) file');
+      alert('Please upload a MusicXML (.xml, .musicxml, .mxl) file');
     }
   };
 
@@ -45,7 +69,7 @@ export default function UploadPage() {
             </span>
             <input
               type="file"
-              accept=".xml,.musicxml"
+              accept=".xml,.musicxml,.mxl"
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-400
                 file:mr-4 file:py-2 file:px-4
