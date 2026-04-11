@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const MusicPlayer = dynamic(() => import('@/app/components/MusicPlayer'), {
+const WebMscorePlayer = dynamic(() => import('@/components/music/WebMscorePlayer').then(mod => mod.WebMscorePlayer), {
   ssr: false,
   loading: () => <div className="text-center py-8">Loading player...</div>
 });
@@ -14,8 +14,8 @@ const MusicPlayer = dynamic(() => import('@/app/components/MusicPlayer'), {
 export default function UploadPage() {
   const { data: session } = useSession();
   const [file, setFile] = useState<File | null>(null);
-  const [musicxml, setMusicxml] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<'musicxml' | 'midi' | null>(null);
+  const [fileData, setFileData] = useState<Uint8Array | null>(null);
+  const [fileType, setFileType] = useState<'xml' | 'mscz' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = async (selectedFile: File) => {
@@ -23,14 +23,22 @@ export default function UploadPage() {
 
     const extension = selectedFile.name.split('.').pop()?.toLowerCase();
 
-    if (extension === 'xml' || extension === 'musicxml') {
-      // Read MusicXML
-      const text = await selectedFile.text();
-      setMusicxml(text);
-      setFileType('musicxml');
+    if (extension === 'xml' || extension === 'musicxml' || extension === 'mscz') {
+      // Read file as Uint8Array
+      const buffer = await selectedFile.arrayBuffer();
+      const data = new Uint8Array(buffer);
+      console.log('[UploadPage] File converted to Uint8Array:', {
+        name: selectedFile.name,
+        size: data.length,
+        type: extension,
+        bufferExists: !!buffer,
+        dataExists: !!data
+      });
+      setFileData(data);
+      setFileType(extension === 'mscz' ? 'mscz' : 'xml');
       setFile(selectedFile);
     } else {
-      alert('Please upload a MusicXML (.xml) file');
+      alert('Please upload a MusicXML (.xml, .musicxml) or MuseScore (.mscz) file');
     }
   };
 
@@ -142,7 +150,7 @@ export default function UploadPage() {
               </label>
 
               <p className="text-sm text-gray-400 mt-4">
-                Supported formats: MusicXML (.xml, .musicxml)
+                Supported formats: MusicXML (.xml, .musicxml), MuseScore (.mscz)
               </p>
 
               {file && (
@@ -160,11 +168,12 @@ export default function UploadPage() {
         </Card>
 
         {/* Music Player */}
-        {file && (
+        {file && fileData && (
           <Card className="glass-card border-purple-400/40" style={{ borderWidth: "2px" }}>
             <CardContent className="p-6">
-              <MusicPlayer 
-                musicxml={musicxml || undefined}
+              <WebMscorePlayer 
+                data={fileData}
+                format={fileType || undefined}
               />
             </CardContent>
           </Card>
@@ -185,7 +194,7 @@ export default function UploadPage() {
                   <div>
                     <h3 className="font-semibold text-lg mb-1 text-white">1. Upload Your File</h3>
                     <p className="text-gray-400">
-                      Drag & drop or browse for a MusicXML file
+                      Drag & drop or browse for a MusicXML or MuseScore file
                     </p>
                   </div>
                 </div>

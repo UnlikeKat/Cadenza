@@ -45,9 +45,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geist.variable} ${geistMono.variable} ${sourceSerif4.variable} ${greatVibes.variable} font-sans antialiased`}
+        suppressHydrationWarning
       >
         <Providers>
           {children}

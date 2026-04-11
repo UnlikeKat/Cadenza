@@ -44,4 +44,9 @@ outputs/
 .idea/
 *.swp
 *.swo
-*~
+# CADENZA SPECIFIC
+.gemini/
+tmp/
+*.log
+web-app/public/soundfonts/
+mscz-service/node_modules/
