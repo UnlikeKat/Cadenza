@@ -44,3 +44,16 @@
 .btn-icon {
   margin-left: 0.5rem;
 }
+
+/* ── Mobile Layout Adjustments ── */
+@media (max-width: 768px) {
+  .hero-title.floating-title {
+    font-size: 4.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .centered-home-page {
+    min-height: calc(100vh - 140px); /* adjust height for stacked nav */
+    padding: 2rem 1rem;
+  }
+}

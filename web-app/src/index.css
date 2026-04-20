@@ -118,3 +118,24 @@ button {
 .btn-outline:hover {
   background-color: var(--bg-secondary);
 }
+
+/* ── Mobile Layout Adjustments ── */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1rem;
+  }
+  
+  .top-nav {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem 0;
+  }
+  
+  .nav-logo {
+    font-size: 2rem;
+  }
+  
+  .nav-links {
+    gap: 1.5rem;
+  }
+}

@@ -173,3 +173,19 @@
   color: var(--text-secondary);
   margin-bottom: 2rem;
 }
+
+/* ── Mobile Layout Adjustments ── */
+@media (max-width: 768px) {
+  .sheet-container {
+    /* Prevent OSMD from squishing notes and lyrics into each other on small mobile screens */
+    min-width: 800px;
+    padding: 0;
+  }
+  
+  .score-page .score-header {
+    padding-top: 5rem;
+    padding-bottom: 1rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
