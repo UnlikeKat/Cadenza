@@ -333,8 +333,6 @@ export function usePracticeMode(
 
     // Count total steps for progress display
     let count = 0;
-    const countCursor = osmd.cursors?.[0] ?? osmd.cursor;
-    const iteratorBackup = countCursor.iterator;
     // We'll estimate total steps from the iterator
     // (Can't easily count without iterating — use a rough estimate)
     try {
