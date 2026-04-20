@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Manuscript - Musical Score</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;family=Manrope:wght@300;400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-container": "#2d2921",
+                    "error-container": "#ffdad6",
+                    "primary-fixed": "#ffdad8",
+                    "inverse-surface": "#30312e",
+                    "on-tertiary-fixed-variant": "#4b463e",
+                    "on-tertiary": "#ffffff",
+                    "inverse-on-surface": "#f2f0ed",
+                    "secondary-fixed": "#ffe088",
+                    "surface-container": "#efeeea",
+                    "on-tertiary-container": "#979085",
+                    "on-surface": "#1b1c1a",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed-dim": "#cec5ba",
+                    "tertiary": "#18150e",
+                    "secondary-fixed-dim": "#e9c349",
+                    "on-primary-fixed": "#380c0d",
+                    "on-error": "#ffffff",
+                    "inverse-primary": "#ffb3b0",
+                    "on-secondary-container": "#745c00",
+                    "error": "#ba1a1a",
+                    "primary-container": "#4a1a1a",
+                    "on-secondary": "#ffffff",
+                    "surface-container-low": "#f5f3ef",
+                    "on-tertiary-fixed": "#1f1b14",
+                    "on-secondary-fixed-variant": "#574500",
+                    "on-secondary-fixed": "#241a00",
+                    "surface-variant": "#e4e2de",
+                    "secondary-container": "#fed65b",
+                    "outline": "#857372",
+                    "on-background": "#1b1c1a",
+                    "tertiary-fixed": "#eae1d5",
+                    "surface-tint": "#8a4d4b",
+                    "primary": "#2f0608",
+                    "background": "#fbf9f5",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-highest": "#e4e2de",
+                    "secondary": "#735c00",
+                    "on-primary-fixed-variant": "#6e3635",
+                    "on-primary-container": "#c57e7b",
+                    "on-surface-variant": "#524342",
+                    "surface-dim": "#dbdad6",
+                    "surface-container-high": "#eae8e4",
+                    "surface-bright": "#fbf9f5",
+                    "surface": "#fbf9f5",
+                    "outline-variant": "#d7c2c0",
+                    "primary-fixed-dim": "#ffb3b0",
+                    "on-primary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Noto Serif"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 100, "GRAD" 0, "opsz" 24;
+    font-size: 28px;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
+}
+.parchment-texture {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuAdnroozJjzTdTda3L7aTOTFZPZM62tDgmP5uXfZY9iGyqNoGeKPNHZOGyqQFalp1_214QrGnVcfbmP2Kw6qSRNIEeU8QBS1VWO2prdLLpqBRq0hOZvqchqJUTMFKNEYMUZA--fGpyl3A1x6aK2L0ODu5T9M4pQxFgdEMGVkOPWhNVF3PEWSVQ4CiPfsWtyq5VVBB7QEi6C-a8twSTXKNnr-pL5l5lfthYi_TP9qMzUlHQXXeudKqzbndTHwQ86iHnYYCNGfX0enINi);
+    background-repeat: repeat
+}
+.manuscript-shadow {
+    box-shadow: 0 20px 40px rgba(27, 28, 26, 0.04)
+}
+.custom-scrollbar::-webkit-scrollbar {
+    width: 3px
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #fbf9f5
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #d7c2c0
+}
+.vintage-icon {
+    filter: drop-shadow(0 0 1px rgba(0,0,0,0.2));
+    stroke-width: 0.5px;
+    stroke: currentColor;
+}
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-tertiary font-body selection:bg-secondary-fixed selection:text-on-secondary-fixed min-h-screen flex flex-col items-center parchment-texture">
+<header class="bg-[#fbf9f5]/80 backdrop-blur-md text-[#2f0608] docked full-width top-0 sticky z-50 border-b border-[#d7c2c0]/20">
+<div class="flex justify-between items-center w-full px-10 h-16">
+<button class="opacity-70 transition-opacity duration-300">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-serif italic text-lg tracking-tight font-medium text-[#2f0608]">The Manuscript</h1>
+<button class="opacity-70 transition-opacity duration-300">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</div>
+</header>
+<main class="flex-grow w-full max-w-2xl px-6 pt-8 pb-36 overflow-y-auto custom-scrollbar">
+<div class="mb-12 text-center">
+<p class="font-label text-secondary tracking-[0.2em] text-[10px] uppercase mb-2">Nocturne No. 2 in E-flat Major</p>
+<h2 class="font-headline text-3xl font-bold text-primary mb-1 tracking-tight">Frédéric Chopin</h2>
+<div class="w-12 h-[1px] bg-outline-variant/30 mx-auto mt-6"></div>
+</div>
+<div class="relative manuscript-shadow bg-surface-container-lowest p-8 md:p-12 mb-10 border border-outline-variant/10 rounded-sm">
+<div class="absolute top-4 right-4 text-[10px] font-label text-outline/50">Op. 9, No. 2</div>
+<div class="space-y-12">
+<div class="space-y-6">
+<img alt="Detailed scanned image of a classical piano musical score on aged yellowed parchment paper with ink notes and elegant calligraphy" class="w-full opacity-90 mix-blend-multiply" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7Isb-n2MTot1H36e8LFEXMPMSAgAV63o89JUhgmQjj3kgI6UZk5ZGdI0RQE7CxqvRRbTZlO7qNOwpoSDcvW6dKMxT-7JG3vxjUC_IEDkQ0fYwp_QM_2jBQ0i8HeZWEN9CN_QR2Sp2E4fw-qhuRwS92V7hC-7_m5UUA6xxRxORTe7vN9F9ClixPct3D1AEmdKubrsK-LsHHl00jjQXqiYIP7NsxrSFr5-5Qme34Azh03AdXV6kWQBc9C14Nem7Gj04DR-fHfxwfYgp"/>
+<div class="flex justify-between items-center px-2">
+<span class="font-serif italic text-sm text-primary/60">Andante</span>
+<span class="font-label text-[10px] text-outline">Pianissimo</span>
+</div>
+</div>
+<div class="space-y-6">
+<img alt="Monochrome musical notation on vintage paper showing complex staves and dynamic markings in high resolution" class="w-full opacity-90 mix-blend-multiply" src="https://lh3.googleusercontent.com/aida-public/AB6AXuUsgDM1hS4XzBivpSIDX-Y1mbUamdjguPWsxukz8V_IAVarU09poV_vqETjt-mq81SKclN30ymqyK-NRDjS8nsMf0mK9OPEars_4mRipnjXv6SRvZoydwlJGto-vAc2X9MClkGjN6R1o28ZAIBX1qxLBzTXny3Y-Hr79ELpNY3IA-VY_3sxaLEcRucQGtuB3CDya2Kut46m6K1jPh1R0KQyTcl6Xhi9vtOdqG2iyKdleA6SzK-pxcAqcXfNrmch5771F5hlhrhn1sW"/>
+</div>
+<div class="space-y-6">
+<img alt="Close up of hand-drawn musical notes on a staff with coffee-stained aged texture and sharp black ink lines" class="w-full opacity-90 mix-blend-multiply" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6lCrLaBvUERlryzRaeuFH9wQct72M7FVVdXIXhHZ3X2INJwY-oCcd5Gp-c7eN71J-tgRaUpS3jDjgQ0awZ-MyoJZ4mIQcxOAqV4JgRILliuCgTc0A4O9MQ4mQ39benqWfsLLtMof3sqa4p3YZRb4wMM5IrZb-U-Cq5e40IbRWGP75TvNTTkLmhBHYz4BM9I0ceuwApJdzH9NT2Mx9WGGVLdy9HKt5vKHqBkRfVdcx0Phaa2Phxm3yZzvHbBcdBBaZos3sBUU98Xgb"/>
+</div>
+</div>
+<div class="mt-16 flex justify-between items-end border-t border-outline-variant/15 pt-4">
+<div class="font-label text-[9px] text-outline uppercase tracking-widest">Digital Archive 2024</div>
+<div class="font-headline italic text-lg text-primary/40">1</div>
+</div>
+</div>
+<div class="w-full mb-12 px-2">
+<div class="flex justify-between items-center mb-2 font-label text-[10px] text-outline">
+<span>01:14</span>
+<span class="text-secondary font-semibold">Allegro</span>
+<span>04:32</span>
+</div>
+<div class="relative w-full h-[1px] bg-outline-variant/30">
+<div class="absolute top-0 left-0 h-full w-1/3 bg-secondary"></div>
+<div class="absolute top-[-4px] left-1/3 w-2 h-2 bg-background border border-secondary rounded-full shadow-sm"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+<div class="p-6 bg-surface-container-low border-l-2 border-primary/20">
+<h4 class="font-headline italic text-sm text-primary mb-2">Performance Notes</h4>
+<p class="font-body text-xs text-on-surface-variant leading-relaxed">Ensure the rubato in the opening theme feels organic, not calculated. Watch for the subtle crescendo in measure 12.</p>
+</div>
+<div class="p-6 bg-surface-container-low border-l-2 border-secondary/20">
+<h4 class="font-headline italic text-sm text-secondary mb-2">Practice Goal</h4>
+<p class="font-body text-xs text-on-surface-variant leading-relaxed">Master the left-hand arpeggios at 80% tempo before increasing speed. Focus on clarity in the trills.</p>
+</div>
+</div>
+</main>
+<div class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-50">
+<nav class="bg-gradient-to-b from-white/40 to-white/10 backdrop-blur-2xl rounded-full h-20 flex justify-around items-center px-6 border border-white/30 shadow-[0_20px_50px_rgba(0,0,0,0.1)] ring-1 ring-white/20">
+<button class="flex flex-col items-center justify-center text-secondary transition-all duration-300 hover:opacity-80 active:scale-95">
+<span class="material-symbols-outlined mb-0.5 text-4xl text-secondary vintage-icon" style="font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 48;">play_circle</span>
+<span class="font-label tracking-[0.2em] uppercase text-[9px] font-semibold opacity-80">Play</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 transition-all duration-300 hover:text-primary active:scale-95">
+<span class="material-symbols-outlined mb-0.5 text-4xl vintage-icon" style="font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 48;">stop_circle</span>
+<span class="font-label tracking-[0.2em] uppercase text-[9px] font-semibold opacity-60">Stop</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 transition-all duration-300 hover:text-primary active:scale-95">
+<div class="relative w-10 h-10 flex items-center justify-center mb-0.5">
+<svg class="w-8 h-8 opacity-80" fill="none" stroke="currentColor" stroke-width="0.75" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="13" r="8"></circle>
+<circle cx="12" cy="13" r="7.2" stroke-dasharray="0.5 1.5"></circle>
+<rect height="2" rx="0.5" width="3" x="10.5" y="2"></rect>
+<path d="M12 4V5"></path>
+<path d="M15.5 4.5L16.5 5.5"></path>
+<path d="M8.5 4.5L7.5 5.5"></path>
+<path d="M12 13L12 9" stroke-linecap="round"></path>
+<path d="M12 13L15 15" stroke-linecap="round" stroke-width="0.5"></path>
+<path d="M12 5.5V6.5"></path>
+<path d="M12 19.5V20.5"></path>
+<path d="M4.5 13H5.5"></path>
+<path d="M18.5 13H19.5"></path>
+<circle cx="12" cy="13" fill="currentColor" r="0.8"></circle>
+</svg>
+</div>
+<span class="font-label tracking-[0.2em] uppercase text-[9px] font-semibold opacity-60">Practice</span>
+</button>
+</nav>
+</div>
+
+</body></html>

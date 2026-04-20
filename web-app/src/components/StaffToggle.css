@@ -1,0 +1,77 @@
+/* ── Sticky Staff Toggles ── */
+
+.staff-toggle-container {
+  position: sticky;
+  top: 5rem; /* below the header */
+  left: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+
+  /* Float over the score content */
+  width: fit-content;
+  margin-top: -6rem; /* overlap the score area */
+  pointer-events: auto;
+}
+
+.staff-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid rgba(197, 168, 128, 0.3);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-family: var(--font-body, 'Manrope', sans-serif);
+  font-size: 0.75rem;
+
+  /* Glassmorphism */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0.2)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.staff-toggle-btn:hover {
+  border-color: rgba(197, 168, 128, 0.6);
+  box-shadow: 0 4px 12px rgba(197, 168, 128, 0.15);
+}
+
+.staff-toggle-clef {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* ── Indicator dot ── */
+.staff-toggle-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.25s ease;
+}
+
+.staff-toggle-btn.enabled .staff-toggle-indicator {
+  background: #4CAF50;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+}
+
+.staff-toggle-btn.disabled .staff-toggle-indicator {
+  background: rgba(0, 0, 0, 0.15);
+  box-shadow: none;
+}
+
+/* Disabled staff — dim the button */
+.staff-toggle-btn.disabled {
+  opacity: 0.5;
+}
+
+.staff-toggle-btn.disabled .staff-toggle-clef {
+  opacity: 0.4;
+}
