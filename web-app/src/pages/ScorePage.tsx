@@ -103,10 +103,10 @@ const ScorePage: React.FC = () => {
           {
             backend: 'svg',
             followCursor: true,
-            drawCredits: true,
-            drawTitle: true,
-            drawComposer: true,
-            drawPartNames: true,
+            drawCredits: false,
+            drawTitle: false,
+            drawComposer: false,
+            drawPartNames: false,
             // Configure cursors for practice mode
             cursorsOptions: [
               {
