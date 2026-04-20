@@ -23,7 +23,6 @@ const ScorePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Preparing the score...');
   const [error, setError] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
   const [progress, setProgress] = useState(0);
 
   const file = location.state?.file as File | undefined;
@@ -103,10 +102,10 @@ const ScorePage: React.FC = () => {
           {
             backend: 'svg',
             followCursor: true,
-            drawCredits: false,
-            drawTitle: false,
-            drawComposer: false,
-            drawPartNames: false,
+            drawCredits: true,
+            drawTitle: true,
+            drawComposer: true,
+            drawPartNames: true,
             // Configure cursors for practice mode
             cursorsOptions: [
               {
@@ -142,7 +141,6 @@ const ScorePage: React.FC = () => {
         }
 
         playerRef.current = player;
-        setTitle(player.title || file.name.replace(/\.[^/.]+$/, ''));
 
         // Extract the OSMD instance from the renderer
         console.log('[ScorePage] Renderer keys:', Object.keys(renderer));
@@ -269,7 +267,6 @@ const ScorePage: React.FC = () => {
         <button className="back-btn" onClick={() => navigate('/upload')}>
           <ArrowLeft size={20} />
         </button>
-        <h1 className="heading score-title">{title || 'Loading...'}</h1>
 
         {practice.isActive && (
           <div className="practice-status">
