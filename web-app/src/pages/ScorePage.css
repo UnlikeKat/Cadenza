@@ -5,11 +5,11 @@
 }
 
 /* Header — simplified: just back button + title */
-.score-header {
+.score-page .score-header {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-top: 6rem;
+  margin-top: 4rem; /* Changed to margin to avoid padding override by .container */
   padding-bottom: 2rem;
 }
 
