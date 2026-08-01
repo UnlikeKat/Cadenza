@@ -22,7 +22,6 @@
   color: var(--text-secondary);
 }
 
-/* Engraved / Embossed feeling for Dropzone */
 .upload-dropzone {
   width: 100%;
   max-width: 700px;

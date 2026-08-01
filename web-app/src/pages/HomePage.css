@@ -33,9 +33,11 @@
   0% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
+
   100% {
     transform: translateY(0px);
   }
@@ -45,15 +47,15 @@
   margin-left: 0.5rem;
 }
 
-/* ── Mobile Layout Adjustments ── */
+/* Layout dispositivi mobili */
 @media (max-width: 768px) {
   .hero-title.floating-title {
     font-size: 4.5rem;
     margin-bottom: 2rem;
   }
-  
+
   .centered-home-page {
-    min-height: calc(100vh - 140px); /* adjust height for stacked nav */
+    min-height: calc(100vh - 140px);
     padding: 2rem 1rem;
   }
 }

@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { WebMidi, type Input } from 'webmidi';
 
 export interface MidiNote {
-  name: string;       // e.g. "C", "D#"
-  octave: number;     // e.g. 4
-  identifier: string; // e.g. "C4"
-  number: number;     // MIDI note number 0-127
-  velocity: number;   // 0-1
+  name: string;
+  octave: number;
+  identifier: string;
+  number: number;
+  velocity: number;
   timestamp: number;
 }
 

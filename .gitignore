@@ -1,0 +1,29 @@
+# === Local environment / IDE configs ===
+.pandaos/
+.opencode/
+.claude/
+.agents/
+.mcp.json
+
+# === Tool caches ===
+web-app/.understand-anything/
+.swarm/
+
+# === OS files ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Editor ===
+.vscode/
+.idea/
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# === Temp ===
+*.log
+*.tmp
+*.bak

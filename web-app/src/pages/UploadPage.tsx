@@ -46,7 +46,6 @@ const UploadPage: React.FC = () => {
 
   const handleOpenScore = () => {
     if (selectedFile) {
-      // Pass both the file and MIDI state to the ScorePage
       navigate('/score', {
         state: {
           file: selectedFile,
@@ -64,20 +63,20 @@ const UploadPage: React.FC = () => {
         <p className="subtitle">Upload your MusicXML file</p>
       </div>
 
-      <div 
+      <div
         className={`upload-dropzone ${isDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileInput} 
-          accept=".xml,.musicxml,.mxl" 
-          className="hidden-input" 
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileInput}
+          accept=".xml,.musicxml,.mxl"
+          className="hidden-input"
         />
-        
+
         {!selectedFile ? (
           <div className="dropzone-content">
             <div className="icon-wrapper">
