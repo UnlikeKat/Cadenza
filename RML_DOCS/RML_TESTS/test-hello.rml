@@ -1,0 +1,6 @@
+// Specifica semplice: 'hello' deve essere seguito da 'world'
+
+hello matches {event:'func_pre',name:'hello'};
+world matches {event:'func_pre',name:'world'};
+
+Main = hello world!;

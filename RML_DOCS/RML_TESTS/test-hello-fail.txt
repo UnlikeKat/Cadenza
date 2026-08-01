@@ -1,0 +1,2 @@
+{"event":"func_pre","name":"hello","args":[]}
+{"event":"func_pre","name":"hello","args":[]}

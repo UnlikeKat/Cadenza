@@ -9,6 +9,9 @@
 web-app/.understand-anything/
 .swarm/
 
+# === Dependencies (recursive) ===
+**/node_modules/
+
 # === OS files ===
 .DS_Store
 Thumbs.db
@@ -22,6 +25,11 @@ desktop.ini
 *.ntvs*
 *.njsproj
 *.sln
+
+# === RML cloned repos (not part of final project) ===
+RML_DOCS/RML_TESTS/compiler/
+RML_DOCS/RML_TESTS/monitor/
+RML_DOCS/RML_TESTS/running_examples/
 
 # === Temp ===
 *.log
