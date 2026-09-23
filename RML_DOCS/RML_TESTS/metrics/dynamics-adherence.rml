@@ -1,0 +1,24 @@
+// Metric: dynamics-adherence
+// Verifica che ogni nota con dinamica "forte" abbia rawAttack >= 80
+// rawAttack e' la velocity MIDI (0-127). Una nota e' "forte" se rawAttack >= 80.
+
+// noteOn: fa match con qualsiasi evento 'noteon', estraendo il numero
+// della nota e la velocity (rawAttack).
+noteOn(num, vel) matches {type:'noteon', note:{number:num, rawAttack:vel}};
+
+// Alias wildcard: fa match con qualsiasi evento noteOn (arity-0).
+// Il wildcard cattura ogni evento noteon senza estrarre campi,
+// consentendo al filtro >> di operare sull'intero stream di note.
+noteOn matches noteOn(_, _);
+
+// forteNote: noteon con dinamica forte.
+// Il vincolo 'with' assicura che rawAttack sia >= 80.
+forteNote(num, vel) matches noteOn(num, vel) with vel >= 80;
+
+// Alias arity-0: necessario per l'uso nel filtro >> di Main.
+forteNote matches forteNote(_, _);
+
+// Main: filtra lo stream noteOn per mantenere solo le note forte.
+// L'operatore >> restringe l'analisi alle sole note che soddisfano
+// il pattern forteNote (rawAttack >= 80).
+Main = (noteOn >> forteNote)*;

@@ -1,0 +1,13 @@
+{
+  "round_index": 1,
+  "next_step": "blocked",
+  "plan_text": "Next: blocked\n\nReason:\nThe manager produced no readable natural-language output.",
+  "executor_output": "",
+  "auditor_report": "",
+  "harness_feedback": "",
+  "task_state": "",
+  "task_contract": "",
+  "related_report_refs": [],
+  "executor_status": {},
+  "auditor_status": {}
+}

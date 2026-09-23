@@ -1,0 +1,38 @@
+// Metrica: Syncopated Pedal (Pedale Sincopato)
+// FR-005: Il pedale sustain (controller 64) viene premuto (value=127)
+// entro 200ms dall'attacco di una nota, tollerando eventi intermedi.
+// Commenti esplicativi in italiano.
+
+// --- Dichiarazioni dei tipi evento (tutte prima delle equazioni) ---
+
+// noteOnT: cattura l'attacco di una nota con il suo timestamp.
+// Estrae solo il timestamp perche' la metrica non dipende dall'altezza.
+noteOnT(ts) matches {type:'noteon', timestamp:ts};
+
+// pedalOn: cattura la pressione del pedale sustain con timestamp.
+// controller:64 e' il pedale sustain; value:127 indica pressione piena
+// (valore LETTERALE come da FR-005, non una soglia >= 64).
+pedalOn(ts) matches {type:'controlchange', controller:64, value:127, timestamp:ts};
+
+// pedalSoon: derivato parametrico (pattern check_der) — il pedale premuto
+// con timestamp t2 deve cadere entro 200ms dopo l'attacco della nota t1.
+// La clausola `with` e' valida SOLO nelle dichiarazioni matches
+// (derivedEvtypeDecl): qui confronta il timestamp dell'evento corrente (t2)
+// con il parametro t1 legato dalla nota precedente. Mai dentro le equazioni.
+pedalSoon(t1) matches pedalOn(t2) with t2 > t1 && t2 - t1 < 200;
+
+// other: qualsiasi evento che non sia attacco di nota o pressione pedale.
+// La negazione `not matches` tollera gli eventi intermedi tra la nota
+// e la pressione del pedale (noteoff, altri controller, ecc.).
+other not matches noteOnT(_) | pedalOn(_);
+
+// --- Equazioni (identificatori UPPERCASE, dopo tutte le dichiarazioni) ---
+
+// Pedal: attacco nota, poi eventuali eventi intermedi (other*),
+// poi pedale entro 200ms. Il blocco {let t1; ...} lega t1 al timestamp
+// della nota e lo riutilizza in pedalSoon(t1) per il vincolo temporale.
+Pedal = {let t1; noteOnT(t1) other* pedalSoon(t1)};
+
+// Main: ripetibile zero o piu' volte — ogni occorrenza e' una nota
+// seguita correttamente dalla pressione sincopata del pedale.
+Main = Pedal*;

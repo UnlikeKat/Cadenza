@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import UploadPage from './pages/UploadPage';
 import ScorePage from './pages/ScorePage';
+import MetricsTestPage from './pages/MetricsTestPage';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
             <div className="nav-links">
               <Link to="/">Home</Link>
               <Link to="/upload">Upload Score</Link>
+              <Link to="/metrics-test">Metrics Lab</Link>
             </div>
           </nav>
         </header>
@@ -24,6 +26,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/score" element={<ScorePage />} />
+            <Route path="/metrics-test" element={<MetricsTestPage />} />
           </Routes>
         </main>
       </div>

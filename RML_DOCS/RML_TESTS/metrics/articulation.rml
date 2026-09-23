@@ -1,0 +1,27 @@
+// Metrica: Articulation (Legato/Staccato)
+// FR-006: delta temporale tra noteoff della nota N e noteon della nota N+1.
+// Delta positivo = gap (staccato); delta negativo o zero = sovrapposizione (legato).
+
+// --- Dichiarazioni dei tipi evento (tutte prima delle equazioni) ---
+
+// noteOnT: attacco di una nota con estrazione del timestamp.
+noteOnT(ts) matches {type:'noteon', timestamp:ts};
+
+// noteOffT: rilascio di una nota con estrazione del timestamp.
+noteOffT(ts) matches {type:'noteoff', timestamp:ts};
+
+// legatoNext: derivato parametrico (pattern check_der) — il noteoff della
+// nota N lega t1; il noteon successivo N+1 (timestamp t2) è legato se
+// delta = t2 - t1 <= 0 (sovrapposizione o contemporaneità = legato).
+// La clausola `with` è valida SOLO qui, nella dichiarazione derivedEvtypeDecl.
+legatoNext(t1) matches noteOnT(t2) with t2 - t1 <= 0;
+
+// --- Equazioni (identificatori UPPERCASE, dopo tutte le dichiarazioni) ---
+
+// Articulation: ogni noteoff(N) seguito da un noteon(N+1) legato.
+// Un noteon con delta positivo (gap = staccato) NON soddisfa legato
+// e produce una violazione del monitor legato.
+Articulation = {let t1; noteOffT(t1) legatoNext(t1)};
+
+// Main: ripetibile zero o più volte.
+Main = Articulation*;

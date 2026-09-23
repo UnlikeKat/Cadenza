@@ -1,0 +1,4 @@
+Next: blocked
+
+Reason:
+The manager produced no readable natural-language output.

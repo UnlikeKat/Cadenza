@@ -1,0 +1,24 @@
+{
+  "status": "error",
+  "error": "2026-08-10T17:47:15.198303Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n2026-08-10T17:47:15.212816Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n",
+  "duration_ms": 90358,
+  "metadata": {
+    "command": "cd /d C:\\Users\\Power\\Desktop\\cadenza && codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -c \"model_providers.lh_harness={name = \\\"LongHorizon-Harness\\\", base_url = \\\"http://127.0.0.1:10531/v1\\\", wire_api = \\\"responses\\\"}\" -c model_provider=\\\"lh_harness\\\" --model gpt-5.6-luna - < C:\\Users\\Power\\Desktop\\cadenza\\.lh-harness\\runs\\20260810T174708Z_f31e3d6a\\tmp\\prompts/round_001_manager_4b443f08e7c2.md",
+    "prompt_path": "C:\\Users\\Power\\Desktop\\cadenza\\.lh-harness\\runs\\20260810T174708Z_f31e3d6a\\tmp\\prompts/round_001_manager_4b443f08e7c2.md",
+    "exit_code": 1,
+    "termination_reason": null,
+    "actions_log_chars": 1179,
+    "trajectory_format": "jsonl",
+    "assistant_visible_output": "",
+    "runtime_signals": [
+      {
+        "signal": "AGENT_TURN_FAILED",
+        "evidence": "s))\nReconnecting... 5/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:10531/v1/responses))\nstream disconnected before completion: error sending request for url (http://127.0.0.1:10531/v1/responses)\nAGENT_TURN_FAILED: stream disconnected before completion: error sending request for url (http://127.0.0.1:10531/v1/responses)"
+      }
+    ],
+    "actions_log_diagnostics_only": true,
+    "stderr_chars": 286,
+    "stderr_tail": "2026-08-10T17:47:15.198303Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n2026-08-10T17:47:15.212816Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n"
+  },
+  "live_trajectory_preserved": false
+}

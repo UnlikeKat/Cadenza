@@ -1,0 +1,14 @@
+// Metric: pitch-range
+// Verifica che tutte le note suonate rientrino nel range del pianoforte a 88 tasti
+// Range MIDI: A0 = 21, C8 = 108
+
+// Definisce il pattern noteOn: fa match con un evento di tipo 'noteon'
+// ed estrae il numero della nota. Il vincolo 'with' assicura che
+// il numero sia compreso tra 21 (A0) e 108 (C8).
+noteOn(num) matches {type:'noteon', note:{number:num}} with num >= 21 && num <= 108;
+
+// noteOn senza argomenti fa match con qualsiasi evento noteOn
+noteOn matches noteOn(_);
+
+// Main accetta una sequenza di zero o piu' eventi noteOn
+Main = noteOn*;

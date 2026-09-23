@@ -1,0 +1,15 @@
+// Qualsiasi nota premuta o rilasciata fa match
+// Range: A0=21 - C8=108
+
+// Nota premuta
+noteOn(num) matches {type:'noteon', note:{number:num}} with num >= 21 && num <= 108;
+
+// Nota rilasciata
+noteOff(num) matches {type:'noteoff', note:{number:num}} with num >= 21 && num <= 108;
+
+noteOn matches noteOn(_);
+noteOff matches noteOff(_);
+
+noteEvent matches noteOn | noteOff;
+
+Main = noteEvent*;

@@ -1,0 +1,37 @@
+// Metric: pedal-toggle
+// Rileva eventi controlchange del controller 64 (pedale sustain) e distingue
+// pressione (value == 127) da rilascio (value == 0).
+
+// controlChange: fa match con qualsiasi evento 'controlchange',
+// estraendo il numero del controller e il valore.
+controlChange(ctrl, val) matches {type:'controlchange', controller:ctrl, value:val};
+
+// Alias wildcard: fa match con qualsiasi evento controlChange (arity-0).
+// Due parametri richiedono due wildcard.
+controlChange matches controlChange(_, _);
+
+// sustainPedal: filtra gli eventi controlchange con controller == 64.
+sustainPedal(val) matches controlChange(64, val);
+
+// Alias arity-0: un parametro richiede un wildcard.
+sustainPedal matches sustainPedal(_);
+
+// pedalPress: rileva la pressione del pedale.
+// Il pedale e' considerato premuto quando value == 127.
+pedalPress(val) matches sustainPedal(val) with val == 127;
+
+// Alias arity-0.
+pedalPress matches pedalPress(_);
+
+// pedalRelease: rileva il rilascio del pedale.
+// Il pedale e' considerato rilasciato quando value == 0.
+pedalRelease(val) matches sustainPedal(val) with val == 0;
+
+// Alias arity-0.
+pedalRelease matches pedalRelease(_);
+
+// pedalEvent: unione di pressione e rilascio del pedale.
+pedalEvent matches pedalPress | pedalRelease;
+
+// Main accetta una sequenza di zero o piu' eventi pedalEvent.
+Main = pedalEvent*;

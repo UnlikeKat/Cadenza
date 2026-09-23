@@ -1,0 +1,24 @@
+// Metrica: Chord Jitter (Accordi < 30ms)
+// FR-004: Le note di un accordo (C4=60, E4=64) devono essere premute
+// entro 30ms l'una dall'altra, in qualsiasi ordine.
+
+// noteOnT: noteon con estrazione del numero nota e del timestamp.
+noteOnT(num, ts) matches {type:'noteon', note:{number:num}, timestamp:ts};
+
+// near: nota MIDI n premuta entro 30ms dal tempo di riferimento t1.
+// Pattern 'check_der': il vincolo with confronta il timestamp dell'evento
+// corrente con un parametro legato da un evento precedente.
+near(n, t1) matches noteOnT(n, t2) with abs(t2 - t1) < 30;
+
+// chordNote: qualsiasi nota dell'accordo target (per il filtro >>).
+chordNote matches noteOnT(60, _) | noteOnT(64, _);
+
+// Chord: coppia C4+E4 entro 30ms in qualsiasi ordine.
+// Le due alternative (unione \/) coprono i due ordini di arrivo;
+// let lega t1 al timestamp della prima nota dell'accordo.
+// Nota: le equazioni richiedono un identificatore maiuscolo (expId della grammatica).
+Chord = {let t1; (noteOnT(60,t1) near(64,t1)) \/ (noteOnT(64,t1) near(60,t1))};
+
+// Main: filtra lo stream alle sole note dell'accordo e verifica
+// che ogni coppia arrivi entro 30ms.
+Main = chordNote >> Chord*;
