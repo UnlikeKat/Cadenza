@@ -146,6 +146,7 @@ function MetricsTestPage() {
     previousNoteOff.current = null;
     lastChordNote.current = null;
     pendingNotes.current = [];
+    processedIndex.current = midi.events.length;
     setSeenNotes(false);
   };
 
