@@ -1,20 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Piano, RotateCcw, Usb } from 'lucide-react';
-import { useMidi } from '../hooks/useMidi';
+import { useMidi, type MidiEvent } from '../hooks/useMidi';
 import './MetricsTestPage.css';
 
 type Status = 'waiting' | 'pass' | 'fail';
 type Metric = { id: string; name: string; description: string; status: Status; detail: string };
-
-type Event = {
-  type: 'noteon' | 'noteoff' | 'controlchange';
-  timestamp: number;
-  note?: number;
-  velocity?: number;
-  controller?: number;
-  value?: number;
-};
 
 const initialStatus: Record<string, Status> = Object.fromEntries(
   ['pitch', 'dynamics', 'pedal', 'chord', 'syncopated', 'articulation'].map((id) => [id, 'waiting']),
@@ -39,11 +30,12 @@ function MetricsTestPage() {
   const [status, setStatus] = useState(initialStatus);
   const [details, setDetails] = useState<Record<string, string>>({});
   const [eventCount, setEventCount] = useState(0);
-  const [lastEvent, setLastEvent] = useState<Event | null>(null);
-  const [trace, setTrace] = useState<Event[]>([]);
+  const [lastEvent, setLastEvent] = useState<MidiEvent | null>(null);
+  const [trace, setTrace] = useState<MidiEvent[]>([]);
   const previousNoteOff = useRef<number | null>(null);
   const lastChordNote = useRef<{ number: number; timestamp: number } | null>(null);
   const pendingNotes = useRef<number[]>([]);
+  const processedIndex = useRef(0);
   const [seenNotes, setSeenNotes] = useState(false);
 
   const update = useCallback((id: string, next: Status, detail: string) => {
@@ -51,7 +43,7 @@ function MetricsTestPage() {
     setDetails((current) => ({ ...current, [id]: detail }));
   }, []);
 
-  const processEvent = useCallback((event: Event) => {
+  const processEvent = useCallback((event: MidiEvent) => {
     setEventCount((count) => count + 1);
     setLastEvent(event);
     setTrace((current) => [...current.slice(-49), event]);
@@ -66,17 +58,23 @@ function MetricsTestPage() {
       }
 
       // FR-002: strong notes must have rawAttack >= 80.
-      if ((event.velocity ?? 0) >= 80) {
-        update('dynamics', 'pass', `Strong note accepted: velocity ${event.velocity}`);
+      const attack = event.rawAttack ?? 0;
+      if (attack < 80) {
+        update('dynamics', 'fail', `rawAttack ${attack} is below the forte threshold (>= 80)`);
       } else {
-        update('dynamics', 'pass', `Velocity ${event.velocity ?? 0}; only notes >= 80 are classified as strong`);
+        update('dynamics', 'pass', `Strong note accepted: rawAttack ${attack}`);
       }
 
       // FR-004: C4/E4 pair within 30ms, either order.
       if (event.note === 60 || event.note === 64) {
         const previous = lastChordNote.current;
-        if (previous && previous.number !== event.note && event.timestamp - previous.timestamp < 30) {
-          update('chord', 'pass', `C4 + E4 detected within ${event.timestamp - previous.timestamp}ms`);
+        if (previous && previous.number !== event.note) {
+          const delta = event.timestamp - previous.timestamp;
+          if (delta >= 30) {
+            update('chord', 'fail', `C4 + E4 arrived ${delta}ms apart (limit: <30ms)`);
+          } else {
+            update('chord', 'pass', `C4 + E4 detected within ${delta}ms`);
+          }
         } else {
           update('chord', 'waiting', 'Waiting for the other chord note within 30ms');
         }
@@ -94,9 +92,10 @@ function MetricsTestPage() {
         update('pedal', 'fail', `Unexpected sustain value ${event.value}; expected 0 or 127`);
       }
 
-      const firstPending = pendingNotes.current[0];
-      if (event.value === 127 && firstPending !== undefined) {
-        const delta = event.timestamp - firstPending;
+      const notes = pendingNotes.current;
+      const recent = notes[notes.length - 1];
+      if (event.value === 127 && recent !== undefined) {
+        const delta = event.timestamp - recent;
         if (delta > 0 && delta < 200) {
           update('syncopated', 'pass', `Pedal pressed ${delta}ms after the note`);
           pendingNotes.current = [];
@@ -123,17 +122,11 @@ function MetricsTestPage() {
   }, [update]);
 
   useEffect(() => {
-    if (!midi.lastEvent) return;
-    const event = midi.lastEvent;
-    processEvent({
-      type: event.type,
-      note: event.note,
-      velocity: event.velocity !== undefined ? Math.round(event.velocity * 127) : undefined,
-      controller: event.controller,
-      value: event.value,
-      timestamp: event.timestamp,
-    });
-  }, [midi.lastEvent, processEvent]);
+    while (processedIndex.current < midi.events.length) {
+      processEvent(midi.events[processedIndex.current]);
+      processedIndex.current += 1;
+    }
+  }, [midi.events, processEvent]);
 
   const metrics: Metric[] = useMemo(() => [
     { id: 'pitch', name: 'Pitch Range', description: 'Every note must be between A0 and C8.', status: status.pitch, detail: details.pitch ?? 'No note received yet' },
