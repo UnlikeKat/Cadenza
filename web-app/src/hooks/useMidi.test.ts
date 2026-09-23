@@ -1,0 +1,792 @@
+/**
+ * useMidi — Task 2.1 acceptance tests.
+ *
+ * Covers:
+ *  1. Bounded MidiEvent[] stream (cap 500, oldest dropped first)
+ *  2. Functional appendEvent (chord-speed batches are never dropped between renders)
+ *  3. Integer rawAttack 0-127 on noteon (webmidi v3 e.note.rawAttack), with
+ *     channel/rawBytes intentionally absent from MidiEvent (live adapter scope)
+ *  4. Export stability: useMidi function + exact UseMidiReturn shape,
+ *     MidiNote / MidiEvent / UseMidiReturn type surfaces
+ *
+ * React and webmidi are mocked at module level (mock.module BEFORE the
+ * dynamic import of the hook) so the hook's state machine can be driven
+ * deterministically without a DOM or a real MIDI device.
+ */
+
+// bun:test has no installed type declarations here: tsconfig.app.json pins
+// `types: ["vite/client"]` and bun-types is not a dependency. Adding a
+// devDependency is outside this task's declared write scope (this test file
+// only), so the unresolved-module diagnostic is suppressed instead.
+// @ts-ignore
+import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from 'bun:test';
+import type { MidiEvent, MidiNote, UseMidiReturn } from './useMidi';
+
+// ---------------------------------------------------------------------------
+// Real module references captured BEFORE mocking, so afterAll can restore the
+// module registry for any test file that shares this bun process later.
+// ---------------------------------------------------------------------------
+
+const realReact = await import('react');
+let realWebMidi: unknown = null;
+try {
+  realWebMidi = await import('webmidi');
+} catch {
+  realWebMidi = null;
+}
+
+// ---------------------------------------------------------------------------
+// Minimal React hook runtime (replaces the 'react' module for this file).
+// Slots persist across renderHook() calls to model a single component
+// instance re-rendering; cursor resets per render to model hook call order.
+// ---------------------------------------------------------------------------
+
+interface Slot {
+  value?: unknown;
+  deps?: readonly unknown[];
+}
+
+let slots: Slot[] = [];
+let cursor = 0;
+let pendingEffects: Array<() => void | (() => void)> = [];
+let cleanups: Array<() => void> = [];
+
+function sameDeps(a: readonly unknown[] | undefined, b: readonly unknown[] | undefined): boolean {
+  if (a === undefined || b === undefined) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!Object.is(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function useStateImpl<T>(initial: T | (() => T)): [T, (next: T | ((prev: T) => T)) => void] {
+  const i = cursor++;
+  let slot = slots[i];
+  if (!slot) {
+    slot = { value: typeof initial === 'function' ? (initial as () => T)() : initial };
+    slots[i] = slot;
+  }
+  const current = slot;
+  const setValue = (next: T | ((prev: T) => T)): void => {
+    current.value = typeof next === 'function' ? (next as (prev: T) => T)(current.value as T) : next;
+  };
+  return [current.value as T, setValue];
+}
+
+function useRefImpl<T>(initial: T): { current: T } {
+  const i = cursor++;
+  let slot = slots[i];
+  if (!slot) {
+    slot = { value: { current: initial } };
+    slots[i] = slot;
+  }
+  return slot.value as { current: T };
+}
+
+function useCallbackImpl<T>(fn: T, deps: readonly unknown[]): T {
+  const i = cursor++;
+  const slot = slots[i];
+  if (!slot || !sameDeps(slot.deps, deps)) {
+    slots[i] = { value: fn, deps: [...deps] };
+  }
+  return slots[i].value as T;
+}
+
+function useEffectImpl(effect: () => void | (() => void), deps: readonly unknown[]): void {
+  const i = cursor++;
+  const slot = slots[i];
+  if (!slot || !sameDeps(slot.deps, deps)) {
+    slots[i] = { deps: [...deps] };
+    pendingEffects.push(effect);
+  }
+}
+
+const reactModuleExports: Record<string, unknown> = {
+  useState: useStateImpl,
+  useEffect: useEffectImpl,
+  useCallback: useCallbackImpl,
+  useRef: useRefImpl,
+};
+reactModuleExports['default'] = reactModuleExports;
+
+// ---------------------------------------------------------------------------
+// webmidi mock: singleton WebMidi + a controllable FakeMidiInput.
+// ---------------------------------------------------------------------------
+
+type Listener = (event: any) => void;
+
+class FakeMidiInput {
+  id: string;
+  listeners = new Map<string, Listener[]>();
+
+  constructor(id: string) {
+    this.id = id;
+  }
+
+  removeListener = mock((type?: string): void => {
+    if (type) {
+      this.listeners.delete(type);
+    } else {
+      this.listeners.clear();
+    }
+  });
+
+  addListener = mock((type: string, listener: Listener): void => {
+    const list = this.listeners.get(type) ?? [];
+    list.push(listener);
+    this.listeners.set(type, list);
+  });
+
+  listenerCount(type: string): number {
+    return (this.listeners.get(type) ?? []).length;
+  }
+
+  emit(type: string, event: unknown): void {
+    const listeners = this.listeners.get(type) ?? [];
+    if (listeners.length === 0) {
+      throw new Error(`no ${type} listener registered on input ${this.id}`);
+    }
+    for (const listener of [...listeners]) {
+      listener(event);
+    }
+  }
+}
+
+const webMidiState = {
+  enabled: false,
+  inputs: [] as FakeMidiInput[],
+  failEnableWith: null as Error | null,
+};
+
+const webMidiMock = {
+  get enabled(): boolean {
+    return webMidiState.enabled;
+  },
+  get inputs(): FakeMidiInput[] {
+    return webMidiState.inputs;
+  },
+  enable: mock(async (): Promise<void> => {
+    if (webMidiState.failEnableWith) {
+      throw webMidiState.failEnableWith;
+    }
+    webMidiState.enabled = true;
+  }),
+  disable: mock((): void => {
+    webMidiState.enabled = false;
+  }),
+  addListener: mock((_type: string, _listener: Listener): void => {}),
+  removeListener: mock((_type: string, _listener: Listener): void => {}),
+  getInputById: (id: string): FakeMidiInput | null =>
+    webMidiState.inputs.find((input) => input.id === id) ?? null,
+};
+
+// ---------------------------------------------------------------------------
+// Module mocks — MUST be registered before the hook module is imported.
+// ---------------------------------------------------------------------------
+
+mock.module('react', () => reactModuleExports);
+mock.module('webmidi', () => ({ WebMidi: webMidiMock }));
+
+const { useMidi } = await import('./useMidi');
+
+// ---------------------------------------------------------------------------
+// Harness
+// ---------------------------------------------------------------------------
+
+function renderHook(): UseMidiReturn {
+  cursor = 0;
+  const result = useMidi();
+  const effects = pendingEffects;
+  pendingEffects = [];
+  for (const effect of effects) {
+    const cleanup = effect();
+    if (typeof cleanup === 'function') {
+      cleanups.push(cleanup);
+    }
+  }
+  return result;
+}
+
+interface NoteOnSpec {
+  timestamp: number;
+  number: number;
+  name: string;
+  accidental: string;
+  octave: number;
+  identifier: string;
+  attack: number;
+  rawAttack: number;
+}
+
+function makeNoteOn(spec: Partial<NoteOnSpec> = {}): unknown {
+  const s: NoteOnSpec = {
+    timestamp: 1000,
+    number: 60,
+    name: 'C',
+    accidental: '',
+    octave: 4,
+    identifier: 'C4',
+    attack: 0.5,
+    rawAttack: 100,
+    ...spec,
+  };
+  return {
+    timestamp: s.timestamp,
+    note: {
+      name: s.name,
+      accidental: s.accidental,
+      octave: s.octave,
+      identifier: s.identifier,
+      number: s.number,
+      attack: s.attack,
+      rawAttack: s.rawAttack,
+    },
+  };
+}
+
+function makeNoteOff(timestamp: number, noteNumber: number): unknown {
+  return { timestamp, note: { number: noteNumber } };
+}
+
+function makeControlChange(timestamp: number, controller: number, value: number): unknown {
+  return { timestamp, controller: { number: controller }, rawValue: value };
+}
+
+async function createHookWithInputs(inputIds: string[]): Promise<{
+  inputs: FakeMidiInput[];
+  result: UseMidiReturn;
+}> {
+  const inputs = inputIds.map((id) => new FakeMidiInput(id));
+  webMidiState.inputs = inputs;
+  const first = renderHook();
+  await first.enable();
+  return { inputs, result: renderHook() };
+}
+
+function globalListener(type: string): () => void {
+  const calls: unknown[][] = webMidiMock.addListener.mock.calls;
+  const found = calls.find((call) => call[0] === type);
+  if (!found) {
+    throw new Error(`missing global ${type} listener`);
+  }
+  return found[1] as () => void;
+}
+
+async function withSuppressedConsoleError(fn: () => Promise<void>): Promise<void> {
+  const originalError = console.error;
+  console.error = (): void => {};
+  try {
+    await fn();
+  } finally {
+    console.error = originalError;
+  }
+}
+
+function clearAllTestMocks(): void {
+  webMidiMock.enable.mockClear();
+  webMidiMock.disable.mockClear();
+  webMidiMock.addListener.mockClear();
+  webMidiMock.removeListener.mockClear();
+}
+
+// ---------------------------------------------------------------------------
+// navigator control (support check reads globalThis.navigator.requestMIDIAccess)
+// ---------------------------------------------------------------------------
+
+interface NavLike {
+  requestMIDIAccess?: unknown;
+}
+
+interface NavigatorSaveState {
+  saved: boolean;
+  original?: PropertyDescriptor;
+  installedOwn: boolean;
+  mutatedExisting: boolean;
+}
+
+let navigatorSaveState: NavigatorSaveState = {
+  saved: false,
+  installedOwn: false,
+  mutatedExisting: false,
+};
+
+function installNavigator(midiCapable: boolean): void {
+  if (!navigatorSaveState.saved) {
+    navigatorSaveState.saved = true;
+    navigatorSaveState.original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  }
+  const nav: NavLike = midiCapable ? { requestMIDIAccess: async () => true } : {};
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: nav,
+      configurable: true,
+      writable: true,
+      enumerable: true,
+    });
+    navigatorSaveState.installedOwn = true;
+    navigatorSaveState.mutatedExisting = false;
+  } catch {
+    // Existing navigator is non-configurable: mutate it in place instead.
+    const existing = (globalThis as { navigator?: NavLike }).navigator;
+    if (!existing) {
+      throw new Error('cannot install navigator for MIDI support tests');
+    }
+    navigatorSaveState.installedOwn = false;
+    if (midiCapable) {
+      Object.defineProperty(existing, 'requestMIDIAccess', {
+        value: async () => true,
+        configurable: true,
+        writable: true,
+      });
+      navigatorSaveState.mutatedExisting = true;
+    } else {
+      Reflect.deleteProperty(existing, 'requestMIDIAccess');
+      navigatorSaveState.mutatedExisting = false;
+    }
+  }
+}
+
+function restoreNavigator(): void {
+  const state = navigatorSaveState;
+  if (!state.saved) return;
+  if (state.mutatedExisting) {
+    const existing = (globalThis as { navigator?: NavLike }).navigator;
+    if (existing) {
+      Reflect.deleteProperty(existing, 'requestMIDIAccess');
+    }
+  } else if (state.installedOwn) {
+    if (state.original) {
+      Object.defineProperty(globalThis, 'navigator', state.original);
+    } else {
+      Reflect.deleteProperty(globalThis, 'navigator');
+    }
+  }
+  navigatorSaveState = { saved: false, installedOwn: false, mutatedExisting: false };
+}
+
+beforeEach(() => {
+  slots = [];
+  cursor = 0;
+  pendingEffects = [];
+  cleanups = [];
+  webMidiState.inputs = [];
+  webMidiState.enabled = false;
+  webMidiState.failEnableWith = null;
+  clearAllTestMocks();
+  installNavigator(true);
+});
+
+afterEach(() => {
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch {
+      // Listener teardown may race disable(); ignore — state resets next test.
+    }
+  }
+  cleanups = [];
+  restoreNavigator();
+  clearAllTestMocks();
+});
+
+afterAll(() => {
+  // Un-mock so later test files in this bun process get the real modules.
+  mock.module('react', () => realReact);
+  if (realWebMidi) {
+    mock.module('webmidi', () => realWebMidi);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('useMidi — task 2.1: bounded event stream, rawAttack, export stability', () => {
+  test('export surface: useMidi is a function, UseMidiReturn shape and initial state are stable', () => {
+    const fn: () => UseMidiReturn = useMidi;
+    expect(typeof fn).toBe('function');
+
+    // Type-surface stability for the exported interfaces (compile-time contract).
+    const noteSample: MidiNote = {
+      name: 'C',
+      octave: 4,
+      identifier: 'C4',
+      number: 60,
+      velocity: 0.5,
+      timestamp: 1,
+    };
+    expect(noteSample.identifier).toBe('C4');
+    const eventSample: MidiEvent = {
+      type: 'noteon',
+      note: 60,
+      velocity: 0.5,
+      rawAttack: 64,
+      timestamp: 1,
+    };
+    expect(eventSample.rawAttack).toBe(64);
+    expect(eventSample.type).toBe('noteon');
+
+    const r = renderHook();
+    expect(Object.keys(r).sort()).toEqual([
+      'activeNotes',
+      'disable',
+      'enable',
+      'error',
+      'events',
+      'inputs',
+      'isEnabled',
+      'isSupported',
+      'lastEvent',
+      'lastNote',
+      'selectInput',
+      'selectedInput',
+    ]);
+    expect(r.isEnabled).toBe(false);
+    expect(r.isSupported).toBe(true);
+    expect(r.events).toEqual([]);
+    expect(r.lastEvent).toBeNull();
+    expect(r.lastNote).toBeNull();
+    expect(r.error).toBeNull();
+    expect(r.activeNotes.size).toBe(0);
+    expect(r.inputs).toEqual([]);
+    expect(r.selectedInput).toBeNull();
+    expect(typeof r.enable).toBe('function');
+    expect(typeof r.selectInput).toBe('function');
+    expect(typeof r.disable).toBe('function');
+  });
+
+  test('support check: isSupported stays true when navigator exposes requestMIDIAccess', () => {
+    const r = renderHook();
+    expect(r.isSupported).toBe(true);
+  });
+
+  test('support check: isSupported flips to false when requestMIDIAccess is missing', () => {
+    installNavigator(false);
+    renderHook(); // first render runs the effect and schedules the state change
+    const r = renderHook(); // second render observes it, mirroring React
+    expect(r.isSupported).toBe(false);
+  });
+
+  test('enable() enables the adapter, selects the first input, and attaches the three listeners', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
+    const [input1, input2] = inputs;
+
+    expect(result.isEnabled).toBe(true);
+    expect(result.error).toBeNull();
+    expect(result.inputs.length).toBe(2);
+    expect(result.inputs[0]).toBe(input1);
+    expect(result.selectedInput).toBe(input1);
+
+    expect(input1.listenerCount('noteon')).toBe(1);
+    expect(input1.listenerCount('noteoff')).toBe(1);
+    expect(input1.listenerCount('controlchange')).toBe(1);
+    expect(input2.listenerCount('noteon')).toBe(0);
+
+    expect(webMidiMock.addListener.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      'connected',
+      'disconnected',
+    ]);
+    expect(webMidiState.enabled).toBe(true);
+  });
+
+  test('noteon appends one event with integer rawAttack and updates note state (before/after)', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    // BEFORE: empty stream, no active notes.
+    expect(result.events.length).toBe(0);
+    expect(result.activeNotes.size).toBe(0);
+
+    input1.emit(
+      'noteon',
+      makeNoteOn({ timestamp: 1000.5, number: 60, attack: 0.75, rawAttack: 96 }),
+    );
+    const r = renderHook();
+
+    // AFTER: exactly one event, exact shape — channel/rawBytes are NOT present.
+    expect(r.events.length).toBe(1);
+    expect(r.events[0]).toEqual({
+      type: 'noteon',
+      note: 60,
+      velocity: 0.75,
+      rawAttack: 96,
+      timestamp: 1000.5,
+    });
+    expect('channel' in r.events[0]).toBe(false);
+    expect('rawBytes' in r.events[0]).toBe(false);
+    expect(Number.isInteger(r.events[0].rawAttack)).toBe(true);
+    expect(r.events[0].rawAttack as number).toBeGreaterThanOrEqual(0);
+    expect(r.events[0].rawAttack as number).toBeLessThanOrEqual(127);
+
+    expect(r.lastEvent).toBe(r.events[0]);
+    expect(r.lastNote?.identifier).toBe('C4');
+    expect(r.lastNote?.name).toBe('C');
+    expect(r.activeNotes.size).toBe(1);
+    expect(r.activeNotes.get(60)?.identifier).toBe('C4');
+  });
+
+  test('rawAttack round-trips exactly for boundary values 0, 1, 64, 127 (0 is kept, not dropped)', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    const boundaries = [0, 1, 64, 127];
+    for (const raw of boundaries) {
+      input1.emit('noteon', makeNoteOn({ timestamp: 100 + raw, rawAttack: raw, attack: raw / 127 }));
+    }
+    const r = renderHook();
+
+    expect(r.events.length).toBe(4);
+    expect(r.events.map((e) => e.rawAttack)).toEqual(boundaries);
+    expect(r.events.every((e) => Number.isInteger(e.rawAttack))).toBe(true);
+    expect(r.events.every((e) => (e.rawAttack as number) >= 0 && (e.rawAttack as number) <= 127)).toBe(
+      true,
+    );
+    // rawAttack is the raw 0-127 integer, independent of the float velocity.
+    expect(r.events.map((e) => e.velocity)).toEqual([0, 1 / 127, 64 / 127, 1]);
+  });
+
+  test('appendEvent is functional: an 8-event chord-speed batch with no intermediate render is kept in order', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    input1.emit('noteon', makeNoteOn({ timestamp: 1 }));
+    input1.emit('noteoff', makeNoteOff(2, 60));
+    input1.emit('controlchange', makeControlChange(3, 64, 127));
+    input1.emit('noteon', makeNoteOn({ timestamp: 4, number: 64, identifier: 'E4', name: 'E' }));
+    input1.emit('noteoff', makeNoteOff(5, 64));
+    input1.emit('controlchange', makeControlChange(6, 64, 0));
+    input1.emit('noteon', makeNoteOn({ timestamp: 7, number: 67, identifier: 'G4', name: 'G' }));
+    input1.emit('noteoff', makeNoteOff(8, 67));
+
+    const r = renderHook();
+    expect(r.events.length).toBe(8);
+    expect(r.events.map((e) => e.timestamp)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(r.events.map((e) => e.type)).toEqual([
+      'noteon',
+      'noteoff',
+      'controlchange',
+      'noteon',
+      'noteoff',
+      'controlchange',
+      'noteon',
+      'noteoff',
+    ]);
+  });
+
+  test('stream is bounded at 500: oldest dropped first, newest retained, cap stable over time', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    // PROPERTY: after N > cap fires in one batch, the stream equals the LAST 500
+    // fired timestamps, in order (lossless within the bound).
+    for (let i = 0; i < 600; i++) {
+      input1.emit('noteon', makeNoteOn({ timestamp: i }));
+    }
+    let r = renderHook();
+    expect(r.events.length).toBe(500);
+    expect(r.events.map((e) => e.timestamp)).toEqual(
+      Array.from({ length: 500 }, (_, i) => i + 100),
+    );
+    expect(r.events.every((e) => (e.timestamp as number) >= 100)).toBe(true);
+
+    // PROPERTY: the cap is stable — one more event pushes one old event out.
+    input1.emit('noteon', makeNoteOn({ timestamp: 600 }));
+    r = renderHook();
+    expect(r.events.length).toBe(500);
+    expect(r.events[r.events.length - 1].timestamp).toBe(600);
+    expect(r.events[0].timestamp).toBe(101);
+  });
+
+  test('noteoff removes the active note and appends an exact event', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+    expect(result.events.length).toBe(0);
+
+    input1.emit('noteon', makeNoteOn({ timestamp: 10 }));
+    let r = renderHook();
+    expect(r.activeNotes.size).toBe(1); // BEFORE noteoff
+
+    input1.emit('noteoff', makeNoteOff(11, 60));
+    r = renderHook();
+    expect(r.activeNotes.size).toBe(0); // AFTER noteoff
+    expect(r.events.length).toBe(2);
+    expect(r.events[1]).toEqual({ type: 'noteoff', note: 60, timestamp: 11 });
+    expect(r.lastEvent).toBe(r.events[1]);
+    expect(r.lastNote?.identifier).toBe('C4'); // lastNote is retained on noteoff
+  });
+
+  test('controlchange appends controller/value event without note or rawAttack', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+    expect(result.events.length).toBe(0);
+
+    input1.emit('controlchange', makeControlChange(66, 64, 127));
+    const r = renderHook();
+    expect(r.events.length).toBe(1);
+    expect(r.events[0]).toEqual({
+      type: 'controlchange',
+      controller: 64,
+      value: 127,
+      timestamp: 66,
+    });
+    expect('note' in r.events[0]).toBe(false);
+    expect('rawAttack' in r.events[0]).toBe(false);
+    expect(r.lastEvent).toBe(r.events[0]);
+  });
+
+  test('unicode boundary: accidental ♯ survives into lastNote.name exactly', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    input1.emit(
+      'noteon',
+      makeNoteOn({
+        timestamp: 90,
+        name: 'B',
+        accidental: '♯',
+        octave: 4,
+        identifier: 'B4',
+        number: 71,
+      }),
+    );
+    const r = renderHook();
+    expect(r.lastNote?.name).toBe('B♯');
+    expect(r.events[0]).toEqual({
+      type: 'noteon',
+      note: 71,
+      velocity: 0.5,
+      rawAttack: 100,
+      timestamp: 90,
+    });
+  });
+
+  test('selectInput() transfers listeners to the chosen input, clears active notes, keeps history', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
+    const [input1, input2] = inputs;
+    expect(result.selectedInput).toBe(input1);
+
+    input1.emit('noteon', makeNoteOn({ timestamp: 50 }));
+    let r = renderHook();
+    expect(r.activeNotes.size).toBe(1); // BEFORE switch
+    expect(r.events.length).toBe(1);
+
+    r.selectInput('input-2');
+    r = renderHook();
+    expect(r.selectedInput).toBe(input2);
+    expect(input2.listenerCount('noteon')).toBe(1);
+    expect(input1.listenerCount('noteon')).toBe(0);
+    expect(r.activeNotes.size).toBe(0); // AFTER switch — cleared
+    expect(r.events.length).toBe(1); // history survives the switch
+
+    input2.emit(
+      'noteon',
+      makeNoteOn({ timestamp: 51, number: 64, identifier: 'E4', name: 'E' }),
+    );
+    r = renderHook();
+    expect(r.events.length).toBe(2); // stream continues losslessly on the new input
+    expect(r.events[1].note).toBe(64);
+  });
+
+  test('selectInput() with an unknown id keeps the current selection and does not throw', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    result.selectInput('does-not-exist');
+    const r = renderHook();
+    expect(r.selectedInput).toBe(input1);
+    expect(r.error).toBeNull();
+    expect(r.isEnabled).toBe(true);
+  });
+
+  test('disable() clears the stream, note state, selection, and this instance\'s global listeners', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    input1.emit('noteon', makeNoteOn({ timestamp: 30 }));
+    input1.emit('controlchange', makeControlChange(31, 64, 127));
+    let r = renderHook();
+    expect(r.events.length).toBe(2); // BEFORE disable
+
+    r.disable();
+    r = renderHook();
+    expect(r.isEnabled).toBe(false);
+    expect(r.events).toEqual([]); // AFTER disable
+    expect(r.lastEvent).toBeNull();
+    expect(r.lastNote).toBeNull();
+    expect(r.activeNotes.size).toBe(0);
+    expect(r.inputs).toEqual([]);
+    expect(r.selectedInput).toBeNull();
+    expect(r.error).toBeNull();
+    expect(webMidiState.enabled).toBe(false);
+    expect(webMidiMock.disable.mock.calls.length).toBe(1);
+    expect(input1.listenerCount('noteon')).toBe(0);
+    expect(
+      webMidiMock.removeListener.mock.calls.map((call: unknown[]) => call[0]),
+    ).toEqual(['connected', 'disconnected']);
+  });
+
+  test('enable() rejection surfaces err.message and keeps isEnabled false', async () => {
+    webMidiState.failEnableWith = new Error('Permission denied');
+    const first = renderHook();
+    await withSuppressedConsoleError(() => first.enable());
+    const r = renderHook();
+    expect(r.error).toBe('Permission denied');
+    expect(r.isEnabled).toBe(false);
+    expect(r.events).toEqual([]);
+  });
+
+  test('enable() rejection with an empty message falls back to the default guidance', async () => {
+    webMidiState.failEnableWith = new Error('');
+    const first = renderHook();
+    await withSuppressedConsoleError(() => first.enable());
+    const r = renderHook();
+    expect(r.error).toBe('Failed to enable MIDI. Ensure your browser supports Web MIDI.');
+    expect(r.isEnabled).toBe(false);
+  });
+
+  test('hot-plug connected: auto-selects the newly attached input and the stream keeps working', async () => {
+    webMidiState.inputs = [];
+    const first = renderHook();
+    await first.enable();
+    let r = renderHook();
+    expect(r.inputs.length).toBe(0);
+    expect(r.selectedInput).toBeNull();
+    expect(r.events).toEqual([]);
+
+    const hotInput = new FakeMidiInput('input-hot');
+    webMidiState.inputs = [hotInput];
+    const onConnected = globalListener('connected');
+    onConnected();
+    r = renderHook();
+    expect(r.selectedInput).toBe(hotInput);
+    expect(r.inputs.length).toBe(1);
+    expect(hotInput.listenerCount('noteon')).toBe(1);
+
+    hotInput.emit('noteon', makeNoteOn({ timestamp: 70, rawAttack: 127 }));
+    r = renderHook();
+    expect(r.events.length).toBe(1);
+    expect(r.events[0].rawAttack).toBe(127);
+  });
+
+  test('hot-plug disconnected: clears selection and active notes but retains event history', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    input1.emit('noteon', makeNoteOn({ timestamp: 80 }));
+    let r = renderHook();
+    expect(r.events.length).toBe(1);
+    expect(r.activeNotes.size).toBe(1); // BEFORE disconnect
+    expect(r.selectedInput).toBe(input1);
+
+    webMidiState.inputs = [];
+    const onDisconnected = globalListener('disconnected');
+    onDisconnected();
+    r = renderHook();
+    expect(r.selectedInput).toBeNull();
+    expect(r.activeNotes.size).toBe(0); // AFTER disconnect
+    expect(r.inputs.length).toBe(0);
+    expect(r.events.length).toBe(1); // history retained — only disable() clears it
+    expect(r.events[0].timestamp).toBe(80);
+  });
+});

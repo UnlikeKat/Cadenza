@@ -54,7 +54,7 @@ export function useMidi(): UseMidiReturn {
   // Store listener references so we can remove ONLY ours on cleanup
   // (WebMidi is a global singleton — calling removeListener() kills ALL hooks)
   const connectedListenerRef = useRef<((...args: any[]) => void) | null>(null);
-  const disconnectedListenerRef = useRef<((...args: any[]) => void) | null>(null>;
+  const disconnectedListenerRef = useRef<((...args: any[]) => void) | null>(null);
 
   // Append to the bounded stream with functional setState so rapid chord-speed
   // input is never dropped between React renders (never reads stale state).
