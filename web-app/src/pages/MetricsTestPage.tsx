@@ -35,7 +35,10 @@ function MetricsTestPage() {
   const previousNoteOff = useRef<number | null>(null);
   const lastChordNote = useRef<{ number: number; timestamp: number } | null>(null);
   const pendingNotes = useRef<number[]>([]);
-  const processedIndex = useRef(0);
+  // Identity anchor: the last MidiEvent object this page consumed. Numeric
+  // indices desync when the bounded stream evicts the head or disable() clears
+  // it; object identity resynchronizes across append, shrink, and repopulate.
+  const lastProcessedEvent = useRef<MidiEvent | null>(null);
   const [seenNotes, setSeenNotes] = useState(false);
 
   const update = useCallback((id: string, next: Status, detail: string) => {
@@ -92,15 +95,25 @@ function MetricsTestPage() {
         update('pedal', 'fail', `Unexpected sustain value ${event.value}; expected 0 or 127`);
       }
 
-      const notes = pendingNotes.current;
-      const recent = notes[notes.length - 1];
-      if (event.value === 127 && recent !== undefined) {
-        const delta = event.timestamp - recent;
-        if (delta > 0 && delta < 200) {
-          update('syncopated', 'pass', `Pedal pressed ${delta}ms after the note`);
-          pendingNotes.current = [];
-        } else if (delta >= 200) {
-          update('syncopated', 'fail', `Pedal was ${delta}ms after the note (limit: <200ms)`);
+      // FR-005: a press is measured against the most recent note-on that no
+      // earlier press has consumed. Every press yields a verdict: with no
+      // pending note-on there is no timing state to invent, and a delta that
+      // is not strictly positive is a violation. Consumed state is always
+      // cleared so a later press cannot reuse a stale note timestamp.
+      if (event.value === 127) {
+        const notes = pendingNotes.current;
+        const recent = notes[notes.length - 1];
+        if (recent === undefined) {
+          update('syncopated', 'fail', 'Sustain pressed with no pending note-on');
+        } else {
+          const delta = event.timestamp - recent;
+          if (delta >= 200) {
+            update('syncopated', 'fail', `Pedal was ${delta}ms after the note (limit: <200ms)`);
+          } else if (delta <= 0) {
+            update('syncopated', 'fail', `Pedal timestamp is ${delta}ms from the note (must be > 0ms and < 200ms)`);
+          } else {
+            update('syncopated', 'pass', `Pedal pressed ${delta}ms after the note`);
+          }
           pendingNotes.current = [];
         }
       }
@@ -122,10 +135,21 @@ function MetricsTestPage() {
   }, [update]);
 
   useEffect(() => {
-    while (processedIndex.current < midi.events.length) {
-      processEvent(midi.events[processedIndex.current]);
-      processedIndex.current += 1;
+    const events = midi.events;
+    const anchor = lastProcessedEvent.current;
+    let start = 0;
+    if (anchor !== null) {
+      const anchorIndex = events.indexOf(anchor);
+      // Anchor missing => head was evicted or the stream was cleared and
+      // replaced; every surviving/new object is still unconsumed.
+      start = anchorIndex === -1 ? 0 : anchorIndex + 1;
     }
+    for (let i = start; i < events.length; i += 1) {
+      processEvent(events[i]);
+    }
+    // StrictMode re-runs this effect without cleanup: the anchor now points
+    // at the tail, so the second pass starts past the end and drains zero.
+    lastProcessedEvent.current = events.length > 0 ? events[events.length - 1] : null;
   }, [midi.events, processEvent]);
 
   const metrics: Metric[] = useMemo(() => [
@@ -146,7 +170,7 @@ function MetricsTestPage() {
     previousNoteOff.current = null;
     lastChordNote.current = null;
     pendingNotes.current = [];
-    processedIndex.current = midi.events.length;
+    lastProcessedEvent.current = midi.events.length > 0 ? midi.events[midi.events.length - 1] : null;
     setSeenNotes(false);
   };
 
