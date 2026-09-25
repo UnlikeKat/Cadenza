@@ -700,7 +700,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('disable() clears the stream, note state, selection, and this instance\'s global listeners', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs } = await createHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     input1.emit('noteon', makeNoteOn({ timestamp: 30 }));
