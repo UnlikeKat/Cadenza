@@ -81,6 +81,6 @@ When the user requests a durable behavior change, record it here or in the relev
 ## Child DOX Index
 
 - `src/` — Application source root: React entry point (`main.tsx`), top-level router (`App.tsx`), global stylesheets, and three durable subdomains:
-  - `src/pages/` — Route-level page components (HomePage, UploadPage, ScorePage)
+  - `src/pages/` — Route-level page components (HomePage, UploadPage, ScorePage, MetricsTestPage)
   - `src/components/` — Reusable presentational components (MidiPanel, PlaybackBar, StaffToggle)
   - `src/hooks/` — Domain-logic hooks (useMidi, usePracticeMode)

@@ -7,7 +7,7 @@ Root of the Cadenza web application source tree. Hosts the React entry point, th
 ## Ownership
 
 - Entry point: `main.tsx` mounts `<App />` into `#root` under `React.StrictMode`
-- `App.tsx` defines the `BrowserRouter` and the three routes (`/`, `/upload`, `/score`) plus the global nav header
+- `App.tsx` defines the `BrowserRouter` and the four routes (`/`, `/upload`, `/score`, `/metrics-test`) plus the global nav header
 - `App.css` holds app-shell layout (header, nav, wrapper)
 - `index.css` is the global stylesheet imported once at boot
 
@@ -32,6 +32,6 @@ Root of the Cadenza web application source tree. Hosts the React entry point, th
 
 ## Child DOX Index
 
-- `pages/` — Route-level page components (Home, Upload, Score) and their co-located CSS
+- `pages/` — Route-level page components (Home, Upload, Score, MetricsTest) and their co-located CSS
 - `components/` — Reusable presentational components (MidiPanel, PlaybackBar, StaffToggle)
 - `hooks/` — Domain-logic hooks (useMidi, usePracticeMode)

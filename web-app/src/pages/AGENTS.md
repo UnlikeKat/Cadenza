@@ -9,10 +9,12 @@ Top-level page components — one per application route. Each page composes hook
 - `HomePage.tsx` / `.css` — Landing page. Minimal hero section with the Cadenza logo and a single CTA linking to `/upload`.
 - `UploadPage.tsx` / `.css` — Score upload screen. Drag-and-drop or browse for a MusicXML file (`.xml`, `.musicxml`, `.mxl`). Hosts the `MidiPanel` so the user can connect a MIDI device before opening the score. Passes the selected `File`, `midiEnabled`, and `midiInputId` to `/score` via `react-router-dom` `location.state`.
 - `ScorePage.tsx` / `.css` — The main score viewer and practice surface. Dynamically imports `@music-i18n/musicxml-player` (Player + OSMD renderer + Verovio converter). Manages playback state, progress tracking, loading/error overlays, and the practice-mode lifecycle. Composes `PlaybackBar`, `StaffToggle`, `useMidi`, and `usePracticeMode`.
+- `MetricsTestPage.tsx` / `.css` — Live RML metrics tester ("Metrics Lab") at `/metrics-test`. Consumes the `useMidi` event stream (`MidiEvent[]`) and evaluates the RML metric specs against each incoming event, rendering a pass/fail/waiting card per metric.
 
 ## Local Contracts
 
-- Route → page mapping is defined in `src/App.tsx`: `/` → `HomePage`, `/upload` → `UploadPage`, `/score` → `ScorePage`
+- Route → page mapping is defined in `src/App.tsx`: `/` → `HomePage`, `/upload` → `UploadPage`, `/score` → `ScorePage`, `/metrics-test` → `MetricsTestPage`
+- `MetricsTestPage` consumes `useMidi`'s bounded `events: MidiEvent[]` stream with an object-identity cursor (`lastProcessedEvent` ref) — numeric indices desync when the stream evicts its head or `disable()` clears it
 - `UploadPage` → `ScorePage` handoff contract via `location.state`:
   - `file: File` — the selected MusicXML file (required; `ScorePage` redirects to `/upload` if absent)
   - `midiEnabled: boolean` — whether MIDI was enabled on the upload page
