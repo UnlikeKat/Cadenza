@@ -515,7 +515,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     expect(r.isSupported).toBe(false);
   });
 
-  test('enable() enables the adapter, selects the first input, and attaches the three listeners', async () => {
+  test('enable() enables the adapter, subscribes to EVERY port, and reports the last as selected', async () => {
     const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
     const [input1, input2] = inputs;
 
@@ -523,12 +523,16 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     expect(result.error).toBeNull();
     expect(result.inputs.length).toBe(2);
     expect(result.inputs[0]).toBe(input1);
-    expect(result.selectedInput).toBe(input1);
+    expect(result.selectedInput).toBe(input2);
 
-    expect(input1.listenerCount('noteon')).toBe(1);
-    expect(input1.listenerCount('noteoff')).toBe(1);
-    expect(input1.listenerCount('controlchange')).toBe(1);
-    expect(input2.listenerCount('noteon')).toBe(0);
+    // Every port carries the three listeners: a Bluetooth bridge enumerates as
+    // two ports and only one of them delivers the keyboard's traffic, so
+    // subscribing to a single port silently drops all events.
+    for (const port of inputs) {
+      expect(port.listenerCount('noteon')).toBe(1);
+      expect(port.listenerCount('noteoff')).toBe(1);
+      expect(port.listenerCount('controlchange')).toBe(1);
+    }
 
     expect(webMidiMock.addListener.mock.calls.map((call: unknown[]) => call[0])).toEqual([
       'connected',
@@ -708,21 +712,25 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     });
   });
 
-  test('selectInput() transfers listeners to the chosen input, clears active notes, keeps history', async () => {
+  test('selectInput() moves the reported selection to the chosen input, clears active notes, keeps history', async () => {
     const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
     const [input1, input2] = inputs;
-    expect(result.selectedInput).toBe(input1);
+    // enable() subscribes to EVERY port (a Bluetooth bridge enumerates as A/B
+    // and only one carries traffic), so the last port is the reported selection.
+    expect(result.selectedInput).toBe(input2);
 
     input1.emit('noteon', makeNoteOn({ timestamp: 50 }));
     let r = renderHook();
-    expect(r.activeNotes.size).toBe(1); // BEFORE switch
+    expect(r.activeNotes.size).toBe(1); // BEFORE switch — any port can deliver
     expect(r.events.length).toBe(1);
 
-    r.selectInput('input-2');
+    r.selectInput('input-1');
     r = renderHook();
-    expect(r.selectedInput).toBe(input2);
+    expect(r.selectedInput).toBe(input1);
+    // selectInput re-subscribes the chosen port; it never silences the others,
+    // so a keyboard on a different port keeps delivering.
+    expect(input1.listenerCount('noteon')).toBe(1);
     expect(input2.listenerCount('noteon')).toBe(1);
-    expect(input1.listenerCount('noteon')).toBe(0);
     expect(r.activeNotes.size).toBe(0); // AFTER switch — cleared
     expect(r.events.length).toBe(1); // history survives the switch
 
@@ -731,7 +739,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
       makeNoteOn({ timestamp: 51, number: 64, identifier: 'E4', name: 'E' }),
     );
     r = renderHook();
-    expect(r.events.length).toBe(2); // stream continues losslessly on the new input
+    expect(r.events.length).toBe(2); // stream continues losslessly on the other port
     expect(r.events[1].note).toBe(64);
   });
 
