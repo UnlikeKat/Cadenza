@@ -48,7 +48,10 @@ interface Slot {
 
 let slots: Slot[] = [];
 let cursor = 0;
-let pendingEffects: Array<() => void | (() => void)> = [];
+// Latest effect body per hook-slot index, so remount() can re-run the effect
+// SETUP after running its cleanup with the deps slot left untouched.
+let mountedEffects = new Map<number, () => void | (() => void)>();
+let pendingEffects: Array<{ index: number; run: () => void | (() => void) }> = [];
 let cleanups: Array<() => void> = [];
 
 function sameDeps(a: readonly unknown[] | undefined, b: readonly unknown[] | undefined): boolean {
@@ -98,7 +101,7 @@ function useEffectImpl(effect: () => void | (() => void), deps: readonly unknown
   const slot = slots[i];
   if (!slot || !sameDeps(slot.deps, deps)) {
     slots[i] = { deps: [...deps] };
-    pendingEffects.push(effect);
+    pendingEffects.push({ index: i, run: effect });
   }
 }
 
@@ -200,12 +203,37 @@ function renderHook(): UseMidiReturn {
   const effects = pendingEffects;
   pendingEffects = [];
   for (const effect of effects) {
-    const cleanup = effect();
+    mountedEffects.set(effect.index, effect.run);
+    const cleanup = effect.run();
     if (typeof cleanup === 'function') {
       cleanups.push(cleanup);
     }
   }
   return result;
+}
+
+/**
+ * Effect remount: run every stored cleanup, then re-run every stored effect
+ * body. The deps slot is deliberately left untouched, so the effect is NOT
+ * re-scheduled on the next render — React would compare identical deps, which
+ * is exactly what a Fast Refresh / StrictMode remount of a component with
+ * unchanged props produces.
+ */
+function remount(): void {
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch {
+      // Teardown may race disable(); the next test resets all state.
+    }
+  }
+  cleanups = [];
+  for (const run of mountedEffects.values()) {
+    const cleanup = run();
+    if (typeof cleanup === 'function') {
+      cleanups.push(cleanup);
+    }
+  }
 }
 
 interface NoteOnSpec {
@@ -271,6 +299,24 @@ function globalListener(type: string): () => void {
     throw new Error(`missing global ${type} listener`);
   }
   return found[1] as () => void;
+}
+
+/**
+ * Every handler passed to WebMidi.addListener for `type`, in registration
+ * order. The webmidi mock is a no-op recorder, so its call list IS the
+ * registration evidence — no real listener bookkeeping is introduced here.
+ */
+function globalRegistrations(type: string): Array<() => void> {
+  return webMidiMock.addListener.mock.calls
+    .filter((call: unknown[]) => call[0] === type)
+    .map((call: unknown[]) => call[1] as () => void);
+}
+
+/** Every handler passed to WebMidi.removeListener for `type`, in removal order. */
+function globalRemovals(type: string): Array<() => void> {
+  return webMidiMock.removeListener.mock.calls
+    .filter((call: unknown[]) => call[0] === type)
+    .map((call: unknown[]) => call[1] as () => void);
 }
 
 async function withSuppressedConsoleError(fn: () => Promise<void>): Promise<void> {
@@ -370,6 +416,7 @@ beforeEach(() => {
   cursor = 0;
   pendingEffects = [];
   cleanups = [];
+  mountedEffects = new Map();
   webMidiState.inputs = [];
   webMidiState.enabled = false;
   webMidiState.failEnableWith = null;
@@ -788,5 +835,94 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     expect(r.inputs.length).toBe(0);
     expect(r.events.length).toBe(1); // history retained — only disable() clears it
     expect(r.events[0].timestamp).toBe(80);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3.2 — regression tests for the 3.1 fix (listener lifecycle on remount).
+//
+// Every test below must FAIL against the pre-3.1 useMidi.ts, otherwise it is
+// not a regression test: the 3.1 fix would be unprotected. See the neutralize
+// procedure in the task report for the observed RED runs.
+// ---------------------------------------------------------------------------
+
+describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
+  test('remount re-attaches the live input listeners to the selected input', async () => {
+    const { inputs } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+    expect(input1).toBeDefined();
+
+    // The 3.1 fix re-runs the effect setup on remount, so the selected input
+    // must carry its listeners again with the selection UNCHANGED. No
+    // selectInput() call, no deps change — only the effect re-running.
+    remount();
+
+    expect(input1.listenerCount('noteon')).toBeGreaterThanOrEqual(1);
+    // FakeMidiInput.emit throws when its listener list is empty, so a pre-fix
+    // run fails loudly here instead of silently recording nothing.
+    input1.emit('noteon', makeNoteOn({ timestamp: 90, rawAttack: 111 }));
+
+    const r = renderHook();
+    expect(r.events.length).toBe(1);
+    expect(r.events[0].rawAttack).toBe(111);
+  });
+
+  test('remount re-registers the global hot-plug handlers with fresh identities', async () => {
+    // Discriminate on REGISTRATION evidence, never on firing a stored handler:
+    // webMidiMock.removeListener is a no-op that deregisters nothing and
+    // globalListener() resolves the FIRST-ever addListener("connected") call,
+    // so a handler-firing assertion would stay green before the fix.
+    webMidiState.inputs = [];
+    const first = renderHook();
+    await first.enable();
+    // The global hot-plug registration lives in the effect, which is gated on
+    // isEnabled — so the state update from enable() needs one more render to
+    // schedule it (same sequence createHookWithInputs relies on).
+    renderHook();
+
+    const beforeRegs = globalRegistrations('connected');
+    const beforeDisRegs = globalRegistrations('disconnected');
+    expect(beforeRegs.length).toBeGreaterThan(0);
+    expect(beforeDisRegs.length).toBeGreaterThan(0);
+    const beforeConnected = beforeRegs[beforeRegs.length - 1];
+    const beforeDisconnected = beforeDisRegs[beforeDisRegs.length - 1];
+
+    remount();
+
+    // (a) the number of "connected" registrations INCREASED across the remount
+    expect(globalRegistrations('connected').length).toBeGreaterThan(beforeRegs.length);
+    // (b) the identity registered after the remount differs from the pre-remount one
+    const afterRegs = globalRegistrations('connected');
+    expect(afterRegs[afterRegs.length - 1]).not.toBe(beforeConnected);
+    // (c) ref-scoped removal passed the EXACT pre-remount handler — the pre-fix
+    //     code registered inside enable() and could not remove by identity
+    expect(globalRemovals('connected')).toContain(beforeConnected);
+    expect(globalRemovals('disconnected')).toContain(beforeDisconnected);
+    // (d) firing the LAST registered "connected" handler still drives state
+    const hotInput = new FakeMidiInput('input-hot');
+    webMidiState.inputs = [hotInput];
+    afterRegs[afterRegs.length - 1]();
+    const r = renderHook();
+    expect(r.selectedInput).toBe(hotInput);
+    expect(r.inputs.length).toBe(1);
+  });
+
+  test('selectInput("") is a no-op that leaves the selection and listeners intact', async () => {
+    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const [input1] = inputs;
+    expect(input1).toBeDefined();
+
+    const before = input1.listenerCount('noteon');
+    expect(before).toBeGreaterThanOrEqual(1);
+
+    // Falsy id: selectInput must early-return BEFORE any removeListener, so the
+    // live input keeps its listeners and the selection does not change.
+    result.selectInput('');
+
+    const r = renderHook();
+    expect(r.selectedInput).toBe(input1);
+    expect(r.selectedInput).not.toBeNull();
+    expect(input1.listenerCount('noteon')).toBe(before);
+    expect(globalRemovals('noteon')).toHaveLength(0);
   });
 });
