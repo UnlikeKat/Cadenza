@@ -8,6 +8,7 @@
 # === Tool caches ===
 web-app/.understand-anything/
 .swarm/
+.lh-harness/
 
 # === Dependencies (recursive) ===
 **/node_modules/
