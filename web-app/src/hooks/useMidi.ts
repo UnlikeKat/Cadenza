@@ -143,40 +143,10 @@ export function useMidi(): UseMidiReturn {
         attachListeners(firstInput);
       }
 
-      // Remove any previous global listeners from this instance
-      if (connectedListenerRef.current) {
-        WebMidi.removeListener('connected', connectedListenerRef.current);
-      }
-      if (disconnectedListenerRef.current) {
-        WebMidi.removeListener('disconnected', disconnectedListenerRef.current);
-      }
-
-      // Create and store new listener references
-      const onConnected = () => {
-        setInputs([...WebMidi.inputs]);
-        if (!selectedInputRef.current && WebMidi.inputs.length > 0) {
-          const firstInput = WebMidi.inputs[0];
-          setSelectedInput(firstInput);
-          selectedInputRef.current = firstInput;
-          attachListeners(firstInput);
-        }
-      };
-
-      const onDisconnected = () => {
-        setInputs([...WebMidi.inputs]);
-        if (selectedInputRef.current && !WebMidi.inputs.find(i => i.id === selectedInputRef.current?.id)) {
-          selectedInputRef.current?.removeListener();
-          setSelectedInput(null);
-          selectedInputRef.current = null;
-          setActiveNotes(new Map());
-        }
-      };
-
-      connectedListenerRef.current = onConnected;
-      disconnectedListenerRef.current = onDisconnected;
-
-      WebMidi.addListener('connected', onConnected);
-      WebMidi.addListener('disconnected', onDisconnected);
+      // Global hot-plug listeners are NOT registered here: the listener-ownership
+      // effect below is the single registration path (it runs when isEnabled
+      // flips to true, so hot-plug still works after an enable() that found
+      // zero inputs) and it never duplicates a live registration.
     } catch (err: any) {
       console.error('MIDI enable error:', err);
       setError(err.message || 'Failed to enable MIDI. Ensure your browser supports Web MIDI.');
@@ -185,17 +155,20 @@ export function useMidi(): UseMidiReturn {
   }, [attachListeners]);
 
   const selectInput = useCallback((inputId: string) => {
+    // Resolve BEFORE detaching: an empty or unresolvable id is a complete
+    // no-op — the live input keeps its listeners and the selection is unchanged.
+    const input = WebMidi.getInputById(inputId);
+    if (!input) {
+      return;
+    }
+
     if (selectedInputRef.current) {
       selectedInputRef.current.removeListener();
     }
-
-    const input = WebMidi.getInputById(inputId);
-    if (input) {
-      setSelectedInput(input);
-      selectedInputRef.current = input;
-      setActiveNotes(new Map());
-      attachListeners(input);
-    }
+    setSelectedInput(input);
+    selectedInputRef.current = input;
+    setActiveNotes(new Map());
+    attachListeners(input);
   }, [attachListeners]);
 
   const disable = useCallback(() => {
@@ -222,23 +195,75 @@ export function useMidi(): UseMidiReturn {
     setEvents([]);
   }, []);
 
-  // Cleanup on unmount — only remove THIS instance's listeners
+  // Listener ownership: attachment lives in the SETUP, not only in cleanup, so
+  // every mount and every effect remount (Vite Fast Refresh / React StrictMode
+  // double-invoke) re-establishes delivery. A cleanup-only effect detached the
+  // live Input on remount while isEnabled/selectedInput survived, leaving a
+  // device that showed as connected but delivered zero events.
   useEffect(() => {
-    return () => {
-      if (selectedInputRef.current) {
-        selectedInputRef.current.removeListener();
+    if (!isEnabled) {
+      return undefined;
+    }
+
+    // Re-attach the input selected for this run. `selectedInput?.id` is read
+    // here as well as declared, so react-hooks/exhaustive-deps sees the
+    // dependency referenced; the ref always holds the same Input instance that
+    // was set alongside the state. attachListeners clears first, so re-running
+    // on selection change never double-subscribes.
+    const input = selectedInput?.id ? selectedInputRef.current : null;
+    if (input) {
+      attachListeners(input);
+    }
+
+    // Single registration path for the global hot-plug handlers: register only
+    // while the ref is missing (first enable, or after a remount's cleanup
+    // nulled it) so a live registration is never duplicated.
+    const onConnected = () => {
+      setInputs([...WebMidi.inputs]);
+      if (!selectedInputRef.current && WebMidi.inputs.length > 0) {
+        const firstInput = WebMidi.inputs[0];
+        setSelectedInput(firstInput);
+        selectedInputRef.current = firstInput;
+        attachListeners(firstInput);
       }
-      // Remove only our specific global listeners, not ALL
-      if (connectedListenerRef.current && WebMidi.enabled) {
+    };
+
+    const onDisconnected = () => {
+      setInputs([...WebMidi.inputs]);
+      if (selectedInputRef.current && !WebMidi.inputs.find(i => i.id === selectedInputRef.current?.id)) {
+        selectedInputRef.current?.removeListener();
+        setSelectedInput(null);
+        selectedInputRef.current = null;
+        setActiveNotes(new Map());
+      }
+    };
+
+    if (!connectedListenerRef.current) {
+      connectedListenerRef.current = onConnected;
+      WebMidi.addListener('connected', onConnected);
+    }
+    if (!disconnectedListenerRef.current) {
+      disconnectedListenerRef.current = onDisconnected;
+      WebMidi.addListener('disconnected', onDisconnected);
+    }
+
+    return () => {
+      // Detach ONLY the input this closure captured — never a later selection.
+      if (input) {
+        input.removeListener();
+      }
+      // Ref-scoped removal: pass the exact handler that was registered.
+      // (WebMidi is a global singleton — never a bare WebMidi.removeListener().)
+      if (connectedListenerRef.current) {
         WebMidi.removeListener('connected', connectedListenerRef.current);
         connectedListenerRef.current = null;
       }
-      if (disconnectedListenerRef.current && WebMidi.enabled) {
+      if (disconnectedListenerRef.current) {
         WebMidi.removeListener('disconnected', disconnectedListenerRef.current);
         disconnectedListenerRef.current = null;
       }
     };
-  }, []);
+  }, [isEnabled, selectedInput?.id, attachListeners]);
 
   return {
     isEnabled,

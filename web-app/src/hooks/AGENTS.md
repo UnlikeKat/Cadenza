@@ -14,6 +14,8 @@ Stateful React hooks that encapsulate cross-cutting domain logic — MIDI device
 - `useMidi` exports the `MidiNote`, `MidiEvent`, and `UseMidiReturn` interfaces; `usePracticeMode` imports `MidiNote` from `useMidi` — this is the only cross-hook dependency
 - `UseMidiReturn.events: MidiEvent[]` is a bounded live stream (cap 500, oldest dropped first) alongside `lastEvent: MidiEvent | null`; consumers must not treat array indices as stable across renders — `MetricsTestPage` resumes consumption by object identity (`lastProcessedEvent` ref)
 - `useMidi` uses ref-tracked listener references so multiple instances don't clobber each other's global WebMidi listeners; never call bare `WebMidi.removeListener()` without a reference
+- `useMidi` attaches the selected input's listeners and the ref-scoped global `connected`/`disconnected` handlers in an effect SETUP keyed on `isEnabled`, `selectedInput?.id`, and `attachListeners`, so delivery and hot-plug registration are re-established on every effect remount (Vite Fast Refresh / StrictMode) instead of being silently detached while the UI still shows the device as connected
+- `useMidi.selectInput()` resolves the id before detaching: an empty or unresolvable id is a complete no-op — the live input keeps its listeners and the current selection is unchanged
 - `usePracticeMode` receives `osmdRef` (OSMD instance ref from `ScorePage`) and `activeNotes` (from `useMidi`) — it does not own MIDI state
 - Staff indices: 1 = treble (top staff), 2 = bass (bottom staff); `enabledStaves` defaults to `{1, 2}` and cannot be emptied
 - Color contract: gold `#C5A880` = current expected notes; green `#4CAF50` = matched notes; `#000000` = reset
