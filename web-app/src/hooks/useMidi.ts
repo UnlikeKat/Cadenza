@@ -155,8 +155,13 @@ export function useMidi(): UseMidiReturn {
   }, [attachListeners]);
 
   const selectInput = useCallback((inputId: string) => {
-    // Resolve BEFORE detaching: an empty or unresolvable id is a complete
-    // no-op — the live input keeps its listeners and the selection is unchanged.
+    // Resolve BEFORE detaching. An empty or unresolvable id leaves the live
+    // input's listeners attached and the selection unchanged, so the guard
+    // below only has to cover the unresolvable case.
+    // NOTE: with webmidi validation on (the default) and MIDI disabled,
+    // `getInputById` throws "WebMidi is not enabled." before it ever sees an
+    // empty id — this is a no-op only while MIDI is enabled. Selecting through
+    // a disabled WebMidi throws; it does not silently no-op.
     const input = WebMidi.getInputById(inputId);
     if (!input) {
       return;

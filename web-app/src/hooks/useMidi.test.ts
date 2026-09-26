@@ -907,7 +907,7 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     expect(r.inputs.length).toBe(1);
   });
 
-  test('selectInput("") is a no-op that leaves the selection and listeners intact', async () => {
+  test('selectInput("") leaves the selection and listeners intact while MIDI is enabled', async () => {
     const { inputs, result } = await createHookWithInputs(['input-1']);
     const [input1] = inputs;
     expect(input1).toBeDefined();
@@ -915,8 +915,10 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     const before = input1.listenerCount('noteon');
     expect(before).toBeGreaterThanOrEqual(1);
 
-    // Falsy id: selectInput must early-return BEFORE any removeListener, so the
-    // live input keeps its listeners and the selection does not change.
+    // Falsy id, with MIDI enabled: selectInput must early-return BEFORE any
+    // removeListener, so the live input keeps its listeners and the selection
+    // does not change. (With MIDI DISABLED and webmidi validation on,
+    // getInputById throws before reaching this guard — see useMidi.ts.)
     result.selectInput('');
 
     const r = renderHook();
