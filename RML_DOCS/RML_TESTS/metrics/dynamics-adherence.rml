@@ -1,24 +1,34 @@
 // Metric: dynamics-adherence
 // Verifica che ogni nota con dinamica "forte" abbia rawAttack >= 80
 // rawAttack e' la velocity MIDI (0-127). Una nota e' "forte" se rawAttack >= 80.
+// NOTA: FR-002 e' una specifica di soglia auto-contenuta, non un confronto
+// con lo spartito. Il verdetto True significa "questa esecuzione contiene
+// almeno una nota forte", False "nessuna". Per verificare l'aderenza alla
+// dinamica notata servirebbe lo spartito: e' la metrica difficile, fuori
+// dalle 6 di Fase 1.
 
 // noteOn: fa match con qualsiasi evento 'noteon', estraendo il numero
 // della nota e la velocity (rawAttack).
 noteOn(num, vel) matches {type:'noteon', note:{number:num, rawAttack:vel}};
 
 // Alias wildcard: fa match con qualsiasi evento noteOn (arity-0).
-// Il wildcard cattura ogni evento noteon senza estrarre campi,
-// consentendo al filtro >> di operare sull'intero stream di note.
+// Il wildcard cattura ogni evento noteon senza estrarre campi.
 noteOn matches noteOn(_, _);
 
 // forteNote: noteon con dinamica forte.
 // Il vincolo 'with' assicura che rawAttack sia >= 80.
 forteNote(num, vel) matches noteOn(num, vel) with vel >= 80;
 
-// Alias arity-0: necessario per l'uso nel filtro >> di Main.
+// Alias arity-0: necessario per l'uso in Main.
 forteNote matches forteNote(_, _);
 
-// Main: filtra lo stream noteOn per mantenere solo le note forte.
-// L'operatore >> restringe l'analisi alle sole note che soddisfano
-// il pattern forteNote (rawAttack >= 80).
-Main = (noteOn >> forteNote)*;
+// Main: ogni evento noteon della traccia deve essere forte (rawAttack >= 80).
+// Correzione 2026-09-26. La specifica originale era (noteOn >> forteNote)*,
+// che e' sbagliata per due motivi:
+//  1) >> in RML e' un FILTRO (ET>>T = T/\ET* | notET*), non una sequenza;
+//  2) concatenando noteOn a forteNote, entrambi matchano lo STESSO evento,
+//     quindi la coppia richiederebbe due eventi forti consecutivi.
+// La stella e' postfissa sul tipo evento (forteNote*), come in piano-test.rml:
+// star(forteNote) non compila, genera un tipo inesistente.
+// Sul monitor reale non esiste un verdetto a 4 valori: solo accepted/rejected.
+Main = forteNote*;

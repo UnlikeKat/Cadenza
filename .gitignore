@@ -32,6 +32,9 @@ RML_DOCS/RML_TESTS/compiler/
 RML_DOCS/RML_TESTS/monitor/
 RML_DOCS/RML_TESTS/running_examples/
 
+# === RML generated (build-pl.ps1) ===
+RML_DOCS/RML_TESTS/metrics/*.pl
+
 # === Temp ===
 *.log
 *.tmp
