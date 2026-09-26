@@ -41,6 +41,16 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 - Each parent explains what its direct children cover and what stays owned by the parent
 - The closer a doc is to the work, the more specific and practical it must be
 
+## Lint Policy
+
+`npx eslint .` must be clean, but three suppressions are deliberate and file-scoped in `eslint.config.js`. Do not delete them; do not widen them:
+
+- `globalIgnores(['dist', 'temp-osmd'])` — `temp-osmd/` is a vendored OpenSheetMusicDisplay build tracked in git, not our code
+- `@typescript-eslint/no-explicit-any: off` for `src/hooks/usePracticeMode.ts` and `src/pages/ScorePage.tsx` — OSMD and `musicxml-player` ship no usable type definitions
+- `react-hooks/globals`, `react-hooks/immutability`, `react-hooks/rules-of-hooks: off` for `src/hooks/useMidi.test.ts` — that file is a hand-rolled hook harness that runs outside a React render tree
+
+Two `set-state-in-effect` suppressions exist inline, each with the reasoning in a comment: `useMidi.ts` (selection must follow the port that actually delivers, and `selectInput` is an explicit user override) and `MetricsTestPage.tsx` (drains the MIDI hook's external event buffer). Both are external-system synchronization, not render-time derivation.
+
 ## Child Doc Shape
 
 - Create a child AGENTS.md when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { WebMidi, type Input } from 'webmidi';
+import { WebMidi, type Input, type PortEvent } from 'webmidi';
 
 export interface MidiNote {
   name: string;
@@ -41,7 +41,7 @@ export interface UseMidiReturn {
 
 export function useMidi(): UseMidiReturn {
   const [isEnabled, setIsEnabled] = useState(false);
-  const [isSupported, setIsSupported] = useState(true);
+  const [isSupported] = useState(() => typeof navigator !== 'undefined' && !!navigator.requestMIDIAccess);
   const [inputs, setInputs] = useState<Input[]>([]);
   const [selectedInput, setSelectedInput] = useState<Input | null>(null);
   const [activeNotes, setActiveNotes] = useState<Map<number, MidiNote>>(new Map());
@@ -71,8 +71,8 @@ export function useMidi(): UseMidiReturn {
 
   // Store listener references so we can remove ONLY ours on cleanup
   // (WebMidi is a global singleton — calling removeListener() kills ALL hooks)
-  const connectedListenerRef = useRef<((...args: any[]) => void) | null>(null);
-  const disconnectedListenerRef = useRef<((...args: any[]) => void) | null>(null);
+  const connectedListenerRef = useRef<((e: PortEvent) => void) | null>(null);
+  const disconnectedListenerRef = useRef<((e: PortEvent) => void) | null>(null);
 
   // Append to the bounded stream with functional setState so rapid chord-speed
   // input is never dropped between React renders (never reads stale state).
@@ -81,13 +81,6 @@ export function useMidi(): UseMidiReturn {
       const next = [...prev, event];
       return next.length > EVENTS_CAP ? next.slice(next.length - EVENTS_CAP) : next;
     });
-  }, []);
-
-  // Check browser support
-  useEffect(() => {
-    if (!navigator.requestMIDIAccess) {
-      setIsSupported(false);
-    }
   }, []);
 
   const attachListeners = useCallback((input: Input) => {
@@ -166,9 +159,13 @@ export function useMidi(): UseMidiReturn {
       // effect below is the single registration path (it runs when isEnabled
       // flips to true, so hot-plug still works after an enable() that found
       // zero inputs) and it never duplicates a live registration.
-    } catch (err: any) {
+    } catch (err) {
       console.error('MIDI enable error:', err);
-      setError(err.message || 'Failed to enable MIDI. Ensure your browser supports Web MIDI.');
+      // `err.message || fallback` on unknown: a DOMException from a denied
+      // permission prompt is not an Error instance, and an empty message must
+      // still fall back to the guidance string (useMidi.test.ts pins both).
+      const message = err instanceof Error ? err.message : '';
+      setError(message || 'Failed to enable MIDI. Ensure your browser supports Web MIDI.');
       setIsEnabled(false);
     }
   }, [attachListeners, trackAttachment]);
@@ -237,6 +234,11 @@ export function useMidi(): UseMidiReturn {
     // double-subscribes.
     for (const port of WebMidi.inputs) {
       attachListeners(port);
+      // Deliberate: selection must follow the port that actually delivers, and
+      // the setState is a no-op on every re-run (ref already holds that port).
+      // Deriving it during render instead would break selectInput(), which is
+      // an explicit user choice that overrides the "last port wins" default.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       trackAttachment(port);
     }
 

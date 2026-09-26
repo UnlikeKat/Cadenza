@@ -182,3 +182,10 @@
     border-right-color: var(--border);
   }
 }
+
+/* Suspense fallback for React.lazy route chunks (see App.tsx) */
+.route-loading {
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+}

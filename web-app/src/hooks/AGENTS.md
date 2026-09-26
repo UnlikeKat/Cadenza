@@ -16,6 +16,9 @@ Stateful React hooks that encapsulate cross-cutting domain logic — MIDI device
 - `useMidi` uses ref-tracked listener references so multiple instances don't clobber each other's global WebMidi listeners; never call bare `WebMidi.removeListener()` without a reference
 - `useMidi` attaches the selected input's listeners and the ref-scoped global `connected`/`disconnected` handlers in an effect SETUP keyed on `isEnabled`, `selectedInput?.id`, and `attachListeners`, so delivery and hot-plug registration are re-established on every effect remount (Vite Fast Refresh / StrictMode) instead of being silently detached while the UI still shows the device as connected
 - `useMidi.selectInput()` resolves the id before detaching: an empty or unresolvable id is a complete no-op — the live input keeps its listeners and the current selection is unchanged
+- `useMidi.isSupported` is a lazy `useState` initializer (`!!navigator.requestMIDIAccess`), never a `setState` in an effect — do not reintroduce a support-check effect
+- `useMidi`'s enable/disable global `connected`/`disconnected` handlers are typed `PortEvent` (the base `webmidi` event), not `MessageEvent`; `MessageEvent extends PortEvent`, so a handler typed `MessageEvent` is not assignable to the port-listener slot
+- `enable()` surfaces `err instanceof Error ? err.message : ''` and then falls back to the default guidance string — an empty message must still produce the guidance, not `""` (pinned by `useMidi.test.ts`)
 - `usePracticeMode` receives `osmdRef` (OSMD instance ref from `ScorePage`) and `activeNotes` (from `useMidi`) — it does not own MIDI state
 - Staff indices: 1 = treble (top staff), 2 = bass (bottom staff); `enabledStaves` defaults to `{1, 2}` and cannot be emptied
 - Color contract: gold `#C5A880` = current expected notes; green `#4CAF50` = matched notes; `#000000` = reset
@@ -23,6 +26,8 @@ Stateful React hooks that encapsulate cross-cutting domain logic — MIDI device
 ## Work Guidance
 
 - OSMD internals are accessed via untyped `any` refs — this is intentional and documented in code comments; prefer `setColor()` API over direct SVG DOM manipulation
+- `no-explicit-any` is disabled for `usePracticeMode.ts` in `web-app/eslint.config.js` because OSMD ships no usable types — the override is per-file and must stay scoped to that file
+- `useMidi.test.ts` runs on **bun**, not vitest (`bun test src/hooks/useMidi.test.ts`), because it drives `mock.module` for the module registry. `web-app/eslint.config.js` disables `react-hooks/globals`, `react-hooks/immutability` and `react-hooks/rules-of-hooks` for that file only: the harness runs the hook outside a React render tree, so those rules report its module-level state as violations. Its harness functions are named with a `use` prefix (`useRenderHook`, `useCreateHookWithInputs`) for that reason
 - `pitchToMidi()` adds 12 to OSMD's `getHalfTone()` to correct the 1-octave offset (C4 = MIDI 60)
 - The chord-tolerance window (250 ms) and post-match delay (150 ms) are tuned constants; change deliberately
 - All timers (`chordTimerRef`) must be cleared on stop/reset/unmount
@@ -31,6 +36,7 @@ Stateful React hooks that encapsulate cross-cutting domain logic — MIDI device
 
 - `npm run lint` — ESLint (note: `ScorePage` disables `react-hooks/exhaustive-deps` on specific effects)
 - `npm run build` — TypeScript type-check
+- `npm test` — vitest; **does not cover `useMidi.test.ts`** (excluded in `vite.config.ts`). Run `bun test src/hooks/useMidi.test.ts` (21 tests) as the gate for this directory
 - Manual: connect a MIDI keyboard, enter practice mode, play a score note-by-note
 
 ## Child DOX Index

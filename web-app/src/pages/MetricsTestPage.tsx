@@ -134,6 +134,14 @@ function MetricsTestPage() {
     }
   }, [update]);
 
+  // Deliberate: this drains an EXTERNAL bounded stream (the MIDI hook's event
+  // buffer), which is the documented job of an effect — subscribe to an
+  // external system, setState in the callback. Deriving during render would
+  // either replay the whole buffer every render or move the FR-001..006
+  // verdicts into a reducer and rewrite the reset path.
+  // ponytail: the anchor ref below is what keeps this incremental instead of
+  // O(n) per render; drop it only if the stream becomes unbounded.
+  /* eslint-disable react-hooks/set-state-in-effect -- drains the MIDI hook's external event buffer; see the ponytail above */
   useEffect(() => {
     const events = midi.events;
     const anchor = lastProcessedEvent.current;

@@ -376,7 +376,7 @@ export function usePracticeMode(
     highlightCurrentNotes();
 
     console.log('[PracticeMode] Started. Enabled staves:', [...enabledStavesRef.current]);
-  }, [osmdRef, getCursor, isRestOrTiedStep, highlightCurrentNotes]);
+  }, [osmdRef, isRestOrTiedStep, highlightCurrentNotes]);
 
   // ── Stop practice mode ──
   const stop = useCallback(() => {

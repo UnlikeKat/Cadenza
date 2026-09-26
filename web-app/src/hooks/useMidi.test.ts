@@ -18,7 +18,7 @@
 // `types: ["vite/client"]` and bun-types is not a dependency. Adding a
 // devDependency is outside this task's declared write scope (this test file
 // only), so the unresolved-module diagnostic is suppressed instead.
-// @ts-ignore
+// @ts-expect-error bun:test has no installed type declarations — see the note above.
 import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from 'bun:test';
 import type { MidiEvent, MidiNote, UseMidiReturn } from './useMidi';
 
@@ -37,7 +37,7 @@ try {
 
 // ---------------------------------------------------------------------------
 // Minimal React hook runtime (replaces the 'react' module for this file).
-// Slots persist across renderHook() calls to model a single component
+// Slots persist across useRenderHook() calls to model a single component
 // instance re-rendering; cursor resets per render to model hook call order.
 // ---------------------------------------------------------------------------
 
@@ -117,7 +117,7 @@ reactModuleExports['default'] = reactModuleExports;
 // webmidi mock: singleton WebMidi + a controllable FakeMidiInput.
 // ---------------------------------------------------------------------------
 
-type Listener = (event: any) => void;
+type Listener = (event: unknown) => void;
 
 class FakeMidiInput {
   id: string;
@@ -178,8 +178,8 @@ const webMidiMock = {
   disable: mock((): void => {
     webMidiState.enabled = false;
   }),
-  addListener: mock((_type: string, _listener: Listener): void => {}),
-  removeListener: mock((_type: string, _listener: Listener): void => {}),
+  addListener: mock((): void => {}),
+  removeListener: mock((): void => {}),
   getInputById: (id: string): FakeMidiInput | null =>
     webMidiState.inputs.find((input) => input.id === id) ?? null,
 };
@@ -197,7 +197,7 @@ const { useMidi } = await import('./useMidi');
 // Harness
 // ---------------------------------------------------------------------------
 
-function renderHook(): UseMidiReturn {
+function useRenderHook(): UseMidiReturn {
   cursor = 0;
   const result = useMidi();
   const effects = pendingEffects;
@@ -281,15 +281,15 @@ function makeControlChange(timestamp: number, controller: number, value: number)
   return { timestamp, controller: { number: controller }, rawValue: value };
 }
 
-async function createHookWithInputs(inputIds: string[]): Promise<{
+async function useCreateHookWithInputs(inputIds: string[]): Promise<{
   inputs: FakeMidiInput[];
   result: UseMidiReturn;
 }> {
   const inputs = inputIds.map((id) => new FakeMidiInput(id));
   webMidiState.inputs = inputs;
-  const first = renderHook();
+  const first = useRenderHook();
   await first.enable();
-  return { inputs, result: renderHook() };
+  return { inputs, result: useRenderHook() };
 }
 
 function globalListener(type: string): () => void {
@@ -474,7 +474,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     expect(eventSample.rawAttack).toBe(64);
     expect(eventSample.type).toBe('noteon');
 
-    const r = renderHook();
+    const r = useRenderHook();
     expect(Object.keys(r).sort()).toEqual([
       'activeNotes',
       'disable',
@@ -504,19 +504,19 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('support check: isSupported stays true when navigator exposes requestMIDIAccess', () => {
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.isSupported).toBe(true);
   });
 
   test('support check: isSupported flips to false when requestMIDIAccess is missing', () => {
     installNavigator(false);
-    renderHook(); // first render runs the effect and schedules the state change
-    const r = renderHook(); // second render observes it, mirroring React
+    useRenderHook(); // first render runs the effect and schedules the state change
+    const r = useRenderHook(); // second render observes it, mirroring React
     expect(r.isSupported).toBe(false);
   });
 
   test('enable() enables the adapter, subscribes to EVERY port, and reports the last as selected', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1', 'input-2']);
     const [input1, input2] = inputs;
 
     expect(result.isEnabled).toBe(true);
@@ -542,7 +542,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('noteon appends one event with integer rawAttack and updates note state (before/after)', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     // BEFORE: empty stream, no active notes.
@@ -553,7 +553,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
       'noteon',
       makeNoteOn({ timestamp: 1000.5, number: 60, attack: 0.75, rawAttack: 96 }),
     );
-    const r = renderHook();
+    const r = useRenderHook();
 
     // AFTER: exactly one event, exact shape — channel/rawBytes are NOT present.
     expect(r.events.length).toBe(1);
@@ -578,14 +578,14 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('rawAttack round-trips exactly for boundary values 0, 1, 64, 127 (0 is kept, not dropped)', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     const boundaries = [0, 1, 64, 127];
     for (const raw of boundaries) {
       input1.emit('noteon', makeNoteOn({ timestamp: 100 + raw, rawAttack: raw, attack: raw / 127 }));
     }
-    const r = renderHook();
+    const r = useRenderHook();
 
     expect(r.events.length).toBe(4);
     expect(r.events.map((e) => e.rawAttack)).toEqual(boundaries);
@@ -598,7 +598,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('appendEvent is functional: an 8-event chord-speed batch with no intermediate render is kept in order', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     input1.emit('noteon', makeNoteOn({ timestamp: 1 }));
@@ -610,7 +610,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     input1.emit('noteon', makeNoteOn({ timestamp: 7, number: 67, identifier: 'G4', name: 'G' }));
     input1.emit('noteoff', makeNoteOff(8, 67));
 
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.events.length).toBe(8);
     expect(r.events.map((e) => e.timestamp)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(r.events.map((e) => e.type)).toEqual([
@@ -626,7 +626,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('stream is bounded at 500: oldest dropped first, newest retained, cap stable over time', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     // PROPERTY: after N > cap fires in one batch, the stream equals the LAST 500
@@ -634,7 +634,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     for (let i = 0; i < 600; i++) {
       input1.emit('noteon', makeNoteOn({ timestamp: i }));
     }
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.events.length).toBe(500);
     expect(r.events.map((e) => e.timestamp)).toEqual(
       Array.from({ length: 500 }, (_, i) => i + 100),
@@ -643,23 +643,23 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
 
     // PROPERTY: the cap is stable — one more event pushes one old event out.
     input1.emit('noteon', makeNoteOn({ timestamp: 600 }));
-    r = renderHook();
+    r = useRenderHook();
     expect(r.events.length).toBe(500);
     expect(r.events[r.events.length - 1].timestamp).toBe(600);
     expect(r.events[0].timestamp).toBe(101);
   });
 
   test('noteoff removes the active note and appends an exact event', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
     expect(result.events.length).toBe(0);
 
     input1.emit('noteon', makeNoteOn({ timestamp: 10 }));
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.activeNotes.size).toBe(1); // BEFORE noteoff
 
     input1.emit('noteoff', makeNoteOff(11, 60));
-    r = renderHook();
+    r = useRenderHook();
     expect(r.activeNotes.size).toBe(0); // AFTER noteoff
     expect(r.events.length).toBe(2);
     expect(r.events[1]).toEqual({ type: 'noteoff', note: 60, timestamp: 11 });
@@ -668,12 +668,12 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('controlchange appends controller/value event without note or rawAttack', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
     expect(result.events.length).toBe(0);
 
     input1.emit('controlchange', makeControlChange(66, 64, 127));
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.events.length).toBe(1);
     expect(r.events[0]).toEqual({
       type: 'controlchange',
@@ -687,7 +687,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('unicode boundary: accidental ♯ survives into lastNote.name exactly', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     input1.emit(
@@ -701,7 +701,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
         number: 71,
       }),
     );
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.lastNote?.name).toBe('B♯');
     expect(r.events[0]).toEqual({
       type: 'noteon',
@@ -713,19 +713,19 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
   });
 
   test('selectInput() moves the reported selection to the chosen input, clears active notes, keeps history', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1', 'input-2']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1', 'input-2']);
     const [input1, input2] = inputs;
     // enable() subscribes to EVERY port (a Bluetooth bridge enumerates as A/B
     // and only one carries traffic), so the last port is the reported selection.
     expect(result.selectedInput).toBe(input2);
 
     input1.emit('noteon', makeNoteOn({ timestamp: 50 }));
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.activeNotes.size).toBe(1); // BEFORE switch — any port can deliver
     expect(r.events.length).toBe(1);
 
     r.selectInput('input-1');
-    r = renderHook();
+    r = useRenderHook();
     expect(r.selectedInput).toBe(input1);
     // selectInput re-subscribes the chosen port; it never silences the others,
     // so a keyboard on a different port keeps delivering.
@@ -738,33 +738,33 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
       'noteon',
       makeNoteOn({ timestamp: 51, number: 64, identifier: 'E4', name: 'E' }),
     );
-    r = renderHook();
+    r = useRenderHook();
     expect(r.events.length).toBe(2); // stream continues losslessly on the other port
     expect(r.events[1].note).toBe(64);
   });
 
   test('selectInput() with an unknown id keeps the current selection and does not throw', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     result.selectInput('does-not-exist');
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.selectedInput).toBe(input1);
     expect(r.error).toBeNull();
     expect(r.isEnabled).toBe(true);
   });
 
   test('disable() clears the stream, note state, selection, and this instance\'s global listeners', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     input1.emit('noteon', makeNoteOn({ timestamp: 30 }));
     input1.emit('controlchange', makeControlChange(31, 64, 127));
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.events.length).toBe(2); // BEFORE disable
 
     r.disable();
-    r = renderHook();
+    r = useRenderHook();
     expect(r.isEnabled).toBe(false);
     expect(r.events).toEqual([]); // AFTER disable
     expect(r.lastEvent).toBeNull();
@@ -783,9 +783,9 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
 
   test('enable() rejection surfaces err.message and keeps isEnabled false', async () => {
     webMidiState.failEnableWith = new Error('Permission denied');
-    const first = renderHook();
+    const first = useRenderHook();
     await withSuppressedConsoleError(() => first.enable());
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.error).toBe('Permission denied');
     expect(r.isEnabled).toBe(false);
     expect(r.events).toEqual([]);
@@ -793,18 +793,18 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
 
   test('enable() rejection with an empty message falls back to the default guidance', async () => {
     webMidiState.failEnableWith = new Error('');
-    const first = renderHook();
+    const first = useRenderHook();
     await withSuppressedConsoleError(() => first.enable());
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.error).toBe('Failed to enable MIDI. Ensure your browser supports Web MIDI.');
     expect(r.isEnabled).toBe(false);
   });
 
   test('hot-plug connected: auto-selects the newly attached input and the stream keeps working', async () => {
     webMidiState.inputs = [];
-    const first = renderHook();
+    const first = useRenderHook();
     await first.enable();
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.inputs.length).toBe(0);
     expect(r.selectedInput).toBeNull();
     expect(r.events).toEqual([]);
@@ -813,23 +813,23 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     webMidiState.inputs = [hotInput];
     const onConnected = globalListener('connected');
     onConnected();
-    r = renderHook();
+    r = useRenderHook();
     expect(r.selectedInput).toBe(hotInput);
     expect(r.inputs.length).toBe(1);
     expect(hotInput.listenerCount('noteon')).toBe(1);
 
     hotInput.emit('noteon', makeNoteOn({ timestamp: 70, rawAttack: 127 }));
-    r = renderHook();
+    r = useRenderHook();
     expect(r.events.length).toBe(1);
     expect(r.events[0].rawAttack).toBe(127);
   });
 
   test('hot-plug disconnected: clears selection and active notes but retains event history', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
 
     input1.emit('noteon', makeNoteOn({ timestamp: 80 }));
-    let r = renderHook();
+    let r = useRenderHook();
     expect(r.events.length).toBe(1);
     expect(r.activeNotes.size).toBe(1); // BEFORE disconnect
     expect(r.selectedInput).toBe(input1);
@@ -837,7 +837,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     webMidiState.inputs = [];
     const onDisconnected = globalListener('disconnected');
     onDisconnected();
-    r = renderHook();
+    r = useRenderHook();
     expect(r.selectedInput).toBeNull();
     expect(r.activeNotes.size).toBe(0); // AFTER disconnect
     expect(r.inputs.length).toBe(0);
@@ -856,7 +856,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
 
 describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
   test('remount re-attaches the live input listeners to the selected input', async () => {
-    const { inputs } = await createHookWithInputs(['input-1']);
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
     expect(input1).toBeDefined();
 
@@ -870,7 +870,7 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     // run fails loudly here instead of silently recording nothing.
     input1.emit('noteon', makeNoteOn({ timestamp: 90, rawAttack: 111 }));
 
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.events.length).toBe(1);
     expect(r.events[0].rawAttack).toBe(111);
   });
@@ -881,12 +881,12 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     // globalListener() resolves the FIRST-ever addListener("connected") call,
     // so a handler-firing assertion would stay green before the fix.
     webMidiState.inputs = [];
-    const first = renderHook();
+    const first = useRenderHook();
     await first.enable();
     // The global hot-plug registration lives in the effect, which is gated on
     // isEnabled — so the state update from enable() needs one more render to
-    // schedule it (same sequence createHookWithInputs relies on).
-    renderHook();
+    // schedule it (same sequence useCreateHookWithInputs relies on).
+    useRenderHook();
 
     const beforeRegs = globalRegistrations('connected');
     const beforeDisRegs = globalRegistrations('disconnected');
@@ -910,13 +910,13 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     const hotInput = new FakeMidiInput('input-hot');
     webMidiState.inputs = [hotInput];
     afterRegs[afterRegs.length - 1]();
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.selectedInput).toBe(hotInput);
     expect(r.inputs.length).toBe(1);
   });
 
   test('selectInput("") leaves the selection and listeners intact while MIDI is enabled', async () => {
-    const { inputs, result } = await createHookWithInputs(['input-1']);
+    const { inputs, result } = await useCreateHookWithInputs(['input-1']);
     const [input1] = inputs;
     expect(input1).toBeDefined();
 
@@ -929,7 +929,7 @@ describe('useMidi — task 3.2: 3.1 fix regression (effect remount)', () => {
     // getInputById throws before reaching this guard — see useMidi.ts.)
     result.selectInput('');
 
-    const r = renderHook();
+    const r = useRenderHook();
     expect(r.selectedInput).toBe(input1);
     expect(r.selectedInput).not.toBeNull();
     expect(input1.listenerCount('noteon')).toBe(before);

@@ -1,8 +1,13 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage';
-import UploadPage from './pages/UploadPage';
-import ScorePage from './pages/ScorePage';
-import MetricsTestPage from './pages/MetricsTestPage';
+
+// Route-level code split. ScorePage statically pulls `usePracticeMode` and the
+// MusicXML/OSMD stylesheet; the 11 MB @music-i18n/musicxml-player chunk is then
+// only fetched when /score actually mounts, instead of on the landing page.
+const UploadPage = lazy(() => import('./pages/UploadPage'));
+const ScorePage = lazy(() => import('./pages/ScorePage'));
+const MetricsTestPage = lazy(() => import('./pages/MetricsTestPage'));
 
 function App() {
   return (
@@ -22,12 +27,14 @@ function App() {
         </header>
 
         <main>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/score" element={<ScorePage />} />
-            <Route path="/metrics-test" element={<MetricsTestPage />} />
-          </Routes>
+          <Suspense fallback={<div className="route-loading">Loading…</div>}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="/score" element={<ScorePage />} />
+              <Route path="/metrics-test" element={<MetricsTestPage />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </Router>
