@@ -15,6 +15,8 @@ Top-level page components — one per application route. Each page composes hook
 
 - Route → page mapping is defined in `src/App.tsx`: `/` → `HomePage`, `/upload` → `UploadPage`, `/score` → `ScorePage`, `/metrics-test` → `MetricsTestPage`
 - `MetricsTestPage` consumes `useMidi`'s bounded `events: MidiEvent[]` stream with an object-identity cursor (`lastProcessedEvent` ref) — numeric indices desync when the stream evicts its head or `disable()` clears it
+- `MetricsTestPage` FR-006 (articulation) verdicts on a note-on in this order: (1) overlap, PASS if any key is still held (`heldNotes` ref); (2) otherwise the gap from the last note-off, PASS if `<= LEGATO_GAP_MS` (30ms); (3) otherwise FAIL, and the note-off cursor is consumed
+- FR-006's threshold is a real constraint on live MIDI, not a stylistic choice: when the next note-on is evaluated the previous note-off is already in the past, so a plain `delta <= 0` rule is unsatisfiable. Overlap is the opposite event order (`noteon` before `noteoff`) and needs the `heldNotes` set, which the RML spec cannot express
 - `UploadPage` → `ScorePage` handoff contract via `location.state`:
   - `file: File` — the selected MusicXML file (required; `ScorePage` redirects to `/upload` if absent)
   - `midiEnabled: boolean` — whether MIDI was enabled on the upload page

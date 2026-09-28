@@ -9,7 +9,10 @@
  *  FR-005 pedal timing — press measures the most recent pending noteon; every
  *                        press yields a verdict (no invented timing state);
  *                        non-positive delta FAILs; consumed pending state cleared
- *  FR-006 articulation — legato (delta <= 0) PASS, staccato (delta > 0) FAIL
+ *  FR-006 articulation — legato PASS when the next note starts while another key
+ *                        is still held, or within 30ms of the previous note-off;
+ *                        a longer gap FAILs. The previous rule (`delta <= 0`)
+ *                        was unsatisfiable on a live MIDI stream.
  *
  * The Task 2.2.1 identity cursor is exercised as the transport (append-only
  * growth of the same event objects); its dedicated regression lives in
@@ -320,30 +323,72 @@ describe('MetricsTestPage — task 2.2.2: metric consumption (FR-002..FR-006)', 
     expectCard(CHORD, 'waiting', 'Waiting for the other chord note within 30ms');
   });
 
-  test('FR-006: a next note coinciding with the note-off passes legato', () => {
-    setEvents([noteOff(1000, 60), noteOn(1000, 64, 90)]);
-    expectCard(ARTICULATION, 'pass', 'Legato: next note starts 0ms from note-off');
-  });
-
-  test('FR-006: a next note starting before the note-off passes legato', () => {
-    setEvents([noteOff(1000, 60), noteOn(970, 64, 90)]);
-    expectCard(ARTICULATION, 'pass', 'Legato: next note starts -30ms from note-off');
-  });
-
-  test('FR-006: a positive gap fails staccato and the note-off cursor resets', () => {
-    const off = noteOff(1000, 60);
-    setEvents([off]);
+  test('FR-006: a next note starting while another key is still held passes legato', () => {
+    // The real legato gesture: press the second key before releasing the first.
+    // The old `delta <= 0` rule never saw this case at all.
+    const first = noteOn(1000, 60, 90);
+    setEvents([first]);
     expectCard(ARTICULATION, 'waiting', 'Waiting for note-off → note-on');
 
+    const second = noteOn(1050, 64, 90);
+    setEvents([first, second]);
+    expectCard(ARTICULATION, 'pass', 'Legato: next note overlaps 1 still-held note(s)');
+  });
+
+  test('FR-006: releasing held notes after an overlap does not re-open a verdict', () => {
+    const first = noteOn(1000, 60, 90);
+    const second = noteOn(1050, 64, 90);
+    setEvents([first, second, noteOff(1100, 60), noteOff(1200, 64)]);
+    expectCard(ARTICULATION, 'pass', 'Legato: next note overlaps 1 still-held note(s)');
+  });
+
+  test('FR-006: a next note within 30ms of the note-off passes legato', () => {
+    setEvents([noteOff(1000, 60), noteOn(1020, 64, 90)]);
+    expectCard(ARTICULATION, 'pass', 'Legato: next note starts 20ms from note-off (limit: <=30ms)');
+  });
+
+  test('FR-006: a gap of exactly 30ms still passes (inclusive boundary)', () => {
+    setEvents([noteOff(1000, 60), noteOn(1030, 64, 90)]);
+    expectCard(ARTICULATION, 'pass', 'Legato: next note starts 30ms from note-off (limit: <=30ms)');
+  });
+
+  test('FR-006: a positive gap over 30ms fails staccato', () => {
+    setEvents([noteOff(1000, 60), noteOn(1050, 64, 90)]);
+    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 50ms (limit: <=30ms)');
+  });
+
+  test('FR-006: a note-on while a key is still held is legato, not a reuse of the consumed cursor', () => {
+    const off = noteOff(1000, 60);
     const gap = noteOn(1050, 64, 90);
     setEvents([off, gap]);
-    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 50ms');
+    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 50ms (limit: <=30ms)');
 
-    // The note-off cursor is consumed by that verdict: a further noteon with
-    // no intervening noteoff leaves the articulation verdict unchanged.
+    // 64 was never released, so the next note-on is legato by overlap: the
+    // overlap check runs before the cursor, which the gap verdict consumed.
     const later = noteOn(1100, 65, 90);
     setEvents([off, gap, later]);
-    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 50ms');
+    expectCard(ARTICULATION, 'pass', 'Legato: next note overlaps 1 still-held note(s)');
+  });
+
+  test('FR-006: releasing the held keys rebases the note-off cursor instead of reusing it', () => {
+    const off = noteOff(1000, 60);
+    const gap = noteOn(1050, 64, 90);
+    const later = noteOn(1100, 65, 90);
+    const release64 = noteOff(1200, 64);
+    const release65 = noteOff(1250, 65);
+    setEvents([off, gap, later, release64, release65]);
+    expectCard(ARTICULATION, 'pass', 'Legato: next note overlaps 1 still-held note(s)');
+
+    // Nothing is held now, so the gap is measured: 50ms from the last release
+    // at 1250 — not 300ms from the stale 1000, which proves the cursor moved.
+    const after = noteOn(1300, 67, 90);
+    setEvents([off, gap, later, release64, release65, after]);
+    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 50ms (limit: <=30ms)');
+  });
+
+  test('FR-006: releasing the last held note then pausing is staccato, not overlap', () => {
+    setEvents([noteOn(1000, 60, 90), noteOff(1000, 60), noteOn(1200, 64, 90)]);
+    expectCard(ARTICULATION, 'fail', 'Staccato gap detected: 200ms (limit: <=30ms)');
   });
 
   test('FR-006: a noteon with no preceding noteoff leaves articulation waiting', () => {

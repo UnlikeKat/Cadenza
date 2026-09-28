@@ -11,10 +11,19 @@ noteOnT(ts) matches {type:'noteon', timestamp:ts};
 noteOffT(ts) matches {type:'noteoff', timestamp:ts};
 
 // legatoNext: derivato parametrico (pattern check_der) — il noteoff della
-// nota N lega t1; il noteon successivo N+1 (timestamp t2) è legato se
-// delta = t2 - t1 <= 0 (sovrapposizione o contemporaneità = legato).
-// La clausola `with` è valida SOLO qui, nella dichiarazione derivedEvtypeDecl.
-legatoNext(t1) matches noteOnT(t2) with t2 - t1 <= 0;
+// nota N lega t1; il noteon successivo N+1 (timestamp t2) e' legato se il
+// silenzio tra i due e' <= 30ms, cioe' nessuna pausa percepibile.
+// La clausola `with` e' valida SOLO qui, nella dichiarazione derivedEvtypeDecl.
+//
+// NOTA 2026-09-28: la soglia era 0 (delta <= 0). Su un flusso MIDI reale quel
+// predicato non e' soddisfacibile: quando il noteon successivo viene valutato,
+// il noteoff precedente e' gia' avvenuto, quindi delta > 0 sempre. La versione
+// TypeScript (MetricsTestPage.tsx) misura inoltre la sovrapposizione vera —
+// il noteon successivo arriva PRIMA del noteoff precedente — cosa che un
+// derivato parametrico su coppia di eventi non puo' esprimere: servirebbe
+// sapere quale nota e' ancora premuta, stato che qui non esiste.
+// Quindi RML copre solo il criterio di gap, il layer TS aggiunge la sovrapposizione.
+legatoNext(t1) matches noteOnT(t2) with t2 - t1 <= 30;
 
 // --- Equazioni (identificatori UPPERCASE, dopo tutte le dichiarazioni) ---
 

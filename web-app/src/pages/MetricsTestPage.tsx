@@ -7,6 +7,9 @@ import './MetricsTestPage.css';
 type Status = 'waiting' | 'pass' | 'fail';
 type Metric = { id: string; name: string; description: string; status: Status; detail: string };
 
+/** FR-006: max silence between a note-off and the next note-on that still counts as legato. */
+const LEGATO_GAP_MS = 30;
+
 const initialStatus: Record<string, Status> = Object.fromEntries(
   ['pitch', 'dynamics', 'pedal', 'chord', 'syncopated', 'articulation'].map((id) => [id, 'waiting']),
 );
@@ -33,6 +36,10 @@ function MetricsTestPage() {
   const [lastEvent, setLastEvent] = useState<MidiEvent | null>(null);
   const [trace, setTrace] = useState<MidiEvent[]>([]);
   const previousNoteOff = useRef<number | null>(null);
+  // FR-006: note numbers still physically down. A note-on arriving while another
+  // key is held IS legato by definition, and no timestamp comparison can detect
+  // it — see the note-off/note-on block in processEvent.
+  const heldNotes = useRef<Set<number>>(new Set());
   const lastChordNote = useRef<{ number: number; timestamp: number } | null>(null);
   const pendingNotes = useRef<number[]>([]);
   // Identity anchor: the last MidiEvent object this page consumed. Numeric
@@ -119,18 +126,30 @@ function MetricsTestPage() {
       }
     }
 
-    // FR-006: next note-on must overlap/be simultaneous with the preceding note-off.
-    if (event.type === 'noteoff') {
+    // FR-006: legato = the next note starts while the previous one is still held
+    // (true overlap), or within LEGATO_GAP_MS of its note-off.
+    // The original spec compared only `delta <= 0`, which a live MIDI stream can
+    // never satisfy: by the time the next note-on is evaluated the previous
+    // note-off is already in the past, so delta is always positive. Overlap is
+    // the opposite ordering (note-on first) and so was never even measured.
+    if (event.type === 'noteoff' && event.note !== undefined) {
+      heldNotes.current.delete(event.note);
       previousNoteOff.current = event.timestamp;
     }
-    if (event.type === 'noteon' && previousNoteOff.current !== null) {
-      const delta = event.timestamp - previousNoteOff.current;
-      if (delta <= 0) {
-        update('articulation', 'pass', `Legato: next note starts ${delta}ms from note-off`);
-      } else {
-        update('articulation', 'fail', `Staccato gap detected: ${delta}ms`);
+    if (event.type === 'noteon' && event.note !== undefined) {
+      if (heldNotes.current.size > 0) {
+        update('articulation', 'pass', `Legato: next note overlaps ${heldNotes.current.size} still-held note(s)`);
+        previousNoteOff.current = null;
+      } else if (previousNoteOff.current !== null) {
+        const delta = event.timestamp - previousNoteOff.current;
+        if (delta <= LEGATO_GAP_MS) {
+          update('articulation', 'pass', `Legato: next note starts ${delta}ms from note-off (limit: <=${LEGATO_GAP_MS}ms)`);
+        } else {
+          update('articulation', 'fail', `Staccato gap detected: ${delta}ms (limit: <=${LEGATO_GAP_MS}ms)`);
+        }
+        previousNoteOff.current = null;
       }
-      previousNoteOff.current = null;
+      heldNotes.current.add(event.note);
     }
   }, [update]);
 
@@ -166,7 +185,7 @@ function MetricsTestPage() {
     { id: 'pedal', name: 'Pedal Toggle', description: 'Sustain CC64 must use 127 for press and 0 for release.', status: status.pedal, detail: details.pedal ?? 'No sustain event received yet' },
     { id: 'chord', name: 'Chord Jitter', description: 'C4 + E4 must arrive within 30ms, in either order.', status: status.chord, detail: details.chord ?? 'Waiting for C4 + E4' },
     { id: 'syncopated', name: 'Syncopated Pedal', description: 'Sustain press must follow a note within 200ms.', status: status.syncopated, detail: details.syncopated ?? 'Waiting for note + pedal' },
-    { id: 'articulation', name: 'Articulation', description: 'Next note must overlap or coincide with the previous note-off.', status: status.articulation, detail: details.articulation ?? 'Waiting for note-off → note-on' },
+    { id: 'articulation', name: 'Articulation', description: `Next note must overlap a held note, or start within ${LEGATO_GAP_MS}ms of the previous note-off.`, status: status.articulation, detail: details.articulation ?? 'Waiting for note-off → note-on' },
   ], [details, status]);
 
   const reset = () => {
@@ -176,6 +195,7 @@ function MetricsTestPage() {
     setLastEvent(null);
     setTrace([]);
     previousNoteOff.current = null;
+    heldNotes.current.clear();
     lastChordNote.current = null;
     pendingNotes.current = [];
     lastProcessedEvent.current = midi.events.length > 0 ? midi.events[midi.events.length - 1] : null;

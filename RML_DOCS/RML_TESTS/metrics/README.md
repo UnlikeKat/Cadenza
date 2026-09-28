@@ -13,7 +13,7 @@ Le metriche operano sul modello di eventi Web MIDI (webmidi v3): oggetti JSON `n
 | `pedal-toggle.rml` | FR-003 | Pedal Toggle Detection — CC64: pressione `value==127`, rilascio `value==0` | `matches` su `controlchange`, `with` (uguaglianze), unione `|`, alias arity-0, `*` | Easy |
 | `chord-jitter.rml` | FR-004 | Chord Jitter — accordo C4(60)+E4(64) premuto entro 30ms in entrambi gli ordini | `let`, `\/` (shuffle), derived parametrico `near(n,t1)` con `abs(t2-t1)<30` (check_der), `>>`, `*` | Medium |
 | `syncopated-pedal.rml` | FR-005 | Syncopated Pedal — pedale premuto (CC64 `value:127`) entro 200ms dall'attacco della nota | `let`, derived parametrico `pedalSoon(t1)` con `t2 > t1 && t2 - t1 < 200` (check_der), `not matches` + `other*` (tolleranza eventi intermedi), `*` | Medium |
-| `articulation.rml` | FR-006 | Articulation (Legato/Staccato) — delta `t2-t1` tra `noteoff(N)` e `noteon(N+1)`; `<=0` = legato, `>0` = staccato (violazione) | `let`, derived parametrico `legatoNext(t1)` con `t2-t1<=0` (check_der), `*` | Medium |
+| `articulation.rml` | FR-006 | Articulation (Legato/Staccato) — delta `t2-t1` tra `noteoff(N)` e `noteon(N+1)`; `<=30ms` = legato, `>30ms` = staccato (violazione) | `let`, derived parametrico `legatoNext(t1)` con `t2-t1<=30` (check_der), `*` | Medium |
 
 ## Come compilare ed eseguire
 
@@ -72,6 +72,21 @@ Una specifica è coperta solo se respinge almeno una traccia: `dynamics-adherenc
 La forma corretta è `Main = forteNote*`: stella **postfissa** sul tipo evento, come in `piano-test.rml`. `star(forteNote)` non compila — genera `star_et(var(forteNote))`, un tipo inesistente.
 
 Nota sul significato: FR-002 è una soglia auto-contenuta, non un confronto con lo spartito. Il verdetto True significa "tutte le note della traccia sono forti", non "l'esecuzione aderisce alla dinamica notata". Il confronto con lo spartito richiede il score follower, che esiste già in `web-app/src/hooks/usePracticeMode.ts` (`GNotesUnderCursor`).
+
+### Correzione applicata il 2026-09-28
+
+**`articulation.rml` (FR-006)** — la soglia era `t2-t1 <= 0`, con l'intento di misurare la sovrapposizione. Il predicato non è soddisfacibile su un flusso MIDI reale: il verdetto viene valutato sul `noteon` successivo, e a quel momento il `noteoff` precedente è **già avvenuto**, quindi `t2 - t1` è necessariamente positivo. Inoltre l'ordine degli eventi è inverso rispetto alla sovrapposizione vera (che è `noteon` **prima** del `noteoff`), quindi quella non veniva neppure esaminata.
+
+Il test esistente non lo evidenziava perché costruiva array sintetici con timestamp fuori ordine (`noteOff(1000)` seguito da `noteOn(970)`), cosa impossibile dallo streaming reale.
+
+Decisione (2026-09-28): legato = la nota successiva suona **mentre la precedente è ancora premuta** (sovrapposizione) **oppure** entro 30ms dal suo rilascio. La soglia 30ms riprende il valore già usato da `chord-jitter`.
+
+Copertura dei due livelli:
+
+- **RML** esprime solo il criterio di gap (`t2-t1 <= 30`). La sovrapposizione richiede di sapere quale nota è ancora premuta, uno stato che un derivato parametrico su coppia di eventi non può rappresentare.
+- **TypeScript** (`web-app/src/pages/MetricsTestPage.tsx`) implementa entrambi: tiene un `Set<number>` delle note ancora premute e controlla la sovrapposizione **prima** del confronto temporale.
+
+Le due tracce di test esistenti restano valide senza modifiche (`delta` 0 → ok, `delta` 100 → fail).
 
 ## Convenzioni grammaticali rispettate
 
