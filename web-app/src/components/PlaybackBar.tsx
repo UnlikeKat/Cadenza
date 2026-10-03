@@ -3,16 +3,16 @@ import './PlaybackBar.css';
 
 interface PlaybackBarProps {
   isPlaying: boolean;
-  isPracticeMode: boolean;
+  isTakeActive: boolean;
   isLoading: boolean;
   progress: number; // 0–100
   onPlayPause: () => void;
   onStop: () => void;
-  onPracticeToggle: () => void;
+  onPlayAlong: () => void;
 }
 
-/** Stopwatch SVG — matches the practice icon from code.html */
-const PracticeIcon: React.FC = () => (
+/** Stopwatch SVG — the play-along button */
+const PlayAlongIcon: React.FC = () => (
   <div className="bar-btn-icon-wrap">
     <svg
       className="practice-stopwatch"
@@ -41,27 +41,27 @@ const PracticeIcon: React.FC = () => (
 
 const PlaybackBar: React.FC<PlaybackBarProps> = ({
   isPlaying,
-  isPracticeMode,
+  isTakeActive,
   isLoading,
   progress,
   onPlayPause,
   onStop,
-  onPracticeToggle,
+  onPlayAlong,
 }) => {
   return (
     <div className="playback-bar" id="playback-bar">
       {/* Thin progress line at the top of the pill */}
-      {!isPracticeMode && (
+      {!isTakeActive && (
         <div className="bar-progress">
           <div className="bar-progress-fill" style={{ width: `${progress}%` }} />
         </div>
       )}
 
-      {/* Play / Pause */}
+      {/* Play / Pause — ascolto puro, non registra nulla */}
       <button
         className={`bar-btn ${isPlaying ? 'active' : ''}`}
         onClick={onPlayPause}
-        disabled={isLoading || isPracticeMode}
+        disabled={isLoading || isTakeActive}
         title={isPlaying ? 'Pause' : 'Play'}
         id="bar-play-btn"
       >
@@ -80,7 +80,7 @@ const PlaybackBar: React.FC<PlaybackBarProps> = ({
       <button
         className="bar-btn"
         onClick={onStop}
-        disabled={isLoading || isPracticeMode}
+        disabled={isLoading}
         title="Stop & Rewind"
         id="bar-stop-btn"
       >
@@ -95,16 +95,16 @@ const PlaybackBar: React.FC<PlaybackBarProps> = ({
         <span className="bar-btn-label">Stop</span>
       </button>
 
-      {/* Practice Mode */}
+      {/* Play along — countdown, score plays, keyboard is recorded, verdict at the end */}
       <button
-        className={`bar-btn ${isPracticeMode ? 'practice-active' : ''}`}
-        onClick={onPracticeToggle}
-        disabled={isLoading}
-        title={isPracticeMode ? 'Exit Practice Mode' : 'Practice Mode'}
+        className={`bar-btn ${isTakeActive ? 'practice-active' : ''}`}
+        onClick={onPlayAlong}
+        disabled={isLoading || isTakeActive}
+        title={isTakeActive ? 'Prova in corso' : 'Suona insieme allo spartito'}
         id="bar-practice-btn"
       >
-        <PracticeIcon />
-        <span className="bar-btn-label">Practice</span>
+        <PlayAlongIcon />
+        <span className="bar-btn-label">{isTakeActive ? 'In corso' : 'Suona insieme'}</span>
       </button>
     </div>
   );

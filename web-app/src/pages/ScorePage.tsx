@@ -2,10 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useMidi } from '../hooks/useMidi';
-import { usePracticeMode } from '../hooks/usePracticeMode';
 import { useVerdict } from '../hooks/useVerdict';
 import PlaybackBar from '../components/PlaybackBar';
-import StaffToggle from '../components/StaffToggle';
 import './ScorePage.css';
 
 // Module-level refs for dynamic imports
@@ -24,6 +22,27 @@ const METRIC_LABELS: Record<string, string> = {
   'syncopated-pedal': 'Pedale sincopato',
 };
 
+/**
+ * Fasi della prova.
+ *
+ * `idle`      spartito fermo, si può ascoltare senza registrarsi
+ * `countdown` lo spartito è pronto ma non parte ancora: il musicista si mette
+ *             al tastierino. È l'unica differenza rispetto a premere Play.
+ * `playing`   lo spartito suona e la tastiera viene registrata.
+ *
+ * `PlayerState` del player contiene solo Stopped/Playing/Paused e non espone
+ * eventi, quindi la fine del brano non si può osservare: si deduce qui,
+ * interrogando position >= duration. La tolleranza evita che l'ultimo
+ * millisecondo venga tagliato.
+ */
+type Phase = 'idle' | 'countdown' | 'playing';
+
+/** Quanto prima della fine scatta il verdetto, in ms. */
+const END_TOLERANCE_MS = 250;
+
+/** Silenzio fra un numero e l'altro del countdown, in ms. */
+const COUNTDOWN_STEP_MS = 750;
+
 const ScorePage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -36,6 +55,8 @@ const ScorePage: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('Preparing the score...');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [count, setCount] = useState(3);
 
   const file = location.state?.file as File | undefined;
   const midiEnabled = location.state?.midiEnabled as boolean | undefined;
@@ -43,9 +64,6 @@ const ScorePage: React.FC = () => {
 
   // MIDI hook
   const midi = useMidi();
-
-  // Practice mode hook — pass OSMD instance ref
-  const practice = usePracticeMode(osmdRef, midi.activeNotes);
 
   // Verdicts — the seven RML specs, computed server-side. The verdict is not
   // decided here: this hook only carries the performance over and reads the
@@ -73,26 +91,71 @@ const ScorePage: React.FC = () => {
     }
   }, [midiEnabled, midiInputId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Progress tracking
+  /** Fine della prova: lo spartito si ferma e il verdetto parte da solo. */
+  const finishPlayAlong = useCallback(async () => {
+    setPhase('idle');
+    setIsPlaying(false);
+    setProgress(100);
+    playerRef.current?.pause();
+    await runAnalysis();
+  }, [runAnalysis]);
+
+  /** Inizia la prova: conta alla rovescia, poi lo spartito suona e registra. */
+  const handlePlayAlong = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player || isLoading) return;
+    if (!midi.isEnabled) {
+      await midi.enable();
+      // L'input MIDI si popola al tick successivo: senza questa attesa i primi
+      // eventi della prova verrebbero persi e l'analisi partirebbe zoppa.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    player.pause();
+    player.rewind();
+    midi.clearRecording();
+    setProgress(0);
+    setCount(3);
+    setPhase('countdown');
+  }, [isLoading, midi]);
+
+  /** Il countdown tiene premuto il musicista al tastierino, poi parte tutto. */
   useEffect(() => {
+    if (phase !== 'countdown') return;
+    if (count > 0) {
+      const timer = setTimeout(() => setCount((c) => c - 1), COUNTDOWN_STEP_MS);
+      return () => clearTimeout(timer);
+    }
+    playerRef.current?.play();
+    setIsPlaying(true);
+    setPhase('playing');
+  }, [phase, count]);
+
+  // Avanziamento e fine brano. PlayerState non ha uno stato "finito" e il player
+  // non emette eventi, quindi la fine si deduce confrontando position e
+  // duration. Senza tolleranza l'ultimo millisecondo verrebbe tagliato e il
+  // brano risulterebbero più corto di quanto lo hai suonato.
+  useEffect(() => {
+    if (phase === 'countdown') return;
+    if (phase === 'idle' && !isPlaying) return;
     let animationId: number;
-    const updateProgress = () => {
-      if (playerRef.current && isPlaying) {
-        const pos = playerRef.current.position;
-        const dur = playerRef.current.duration;
+    const tick = () => {
+      const player = playerRef.current;
+      if (player) {
+        const dur = player.duration;
+        const pos = player.position;
         if (dur > 0) {
           setProgress((pos / dur) * 100);
+          if (phase === 'playing' && pos >= dur - END_TOLERANCE_MS) {
+            void finishPlayAlong();
+            return;
+          }
         }
       }
-      animationId = requestAnimationFrame(updateProgress);
+      animationId = requestAnimationFrame(tick);
     };
-    if (isPlaying) {
-      animationId = requestAnimationFrame(updateProgress);
-    }
-    return () => {
-      if (animationId) cancelAnimationFrame(animationId);
-    };
-  }, [isPlaying]);
+    animationId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationId);
+  }, [phase, isPlaying, finishPlayAlong]);
 
   // Initialize player with OSMD renderer
   useEffect(() => {
@@ -212,61 +275,41 @@ const ScorePage: React.FC = () => {
   // ── Playback Controls ──────────────────────────────
 
   const handlePlayPause = useCallback(() => {
-    if (!playerRef.current || practice.isActive) return;
+    const player = playerRef.current;
+    if (!player || phase === 'countdown' || phase === 'playing') return;
     if (isPlaying) {
-      playerRef.current.pause();
+      player.pause();
       setIsPlaying(false);
     } else {
-      playerRef.current.play();
+      player.play();
       setIsPlaying(true);
     }
-  }, [isPlaying, practice.isActive]);
+  }, [isPlaying, phase]);
 
+  // Stop interrompe anche una prova in corso. La registrazione resta: se il
+  // brano è stato interrotto a metà, il musicista di solito vuole riascoltare
+  // quello che ha già suonato, e "Suona insieme" riparte comunque da zero.
   const handleStop = useCallback(() => {
-    if (!playerRef.current || practice.isActive) return;
-    playerRef.current.rewind();
+    const player = playerRef.current;
+    if (!player) return;
+    player.pause();
+    player.rewind();
     setProgress(0);
-    if (isPlaying) {
-      playerRef.current.pause();
-    }
     setIsPlaying(false);
-  }, [isPlaying, practice.isActive]);
-
-  const handlePracticeToggle = useCallback(() => {
-    if (practice.isActive) {
-      practice.stop();
-    } else {
-      // Stop playback first if playing
-      if (isPlaying && playerRef.current) {
-        playerRef.current.pause();
-        playerRef.current.rewind();
-        setIsPlaying(false);
-        setProgress(0);
-      }
-
-      if (!midi.isEnabled) {
-        // Auto-enable MIDI if not already enabled
-        midi.enable().then(() => {
-          // Wait for MIDI to initialize
-          setTimeout(() => practice.start(), 300);
-        });
-      } else {
-        practice.start();
-      }
-    }
-  }, [practice, isPlaying, midi]);
+    setPhase('idle');
+  }, []);
 
   // Space bar play/pause (only in playback mode)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === ' ' && !isLoading && !practice.isActive) {
+      if (e.key === ' ' && !isLoading && phase !== 'countdown' && phase !== 'playing') {
         e.preventDefault();
         handlePlayPause();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause, isLoading, practice.isActive]);
+  }, [handlePlayPause, isLoading, phase]);
 
   // ── Render ─────────────────────────────────────────
 
@@ -284,20 +327,18 @@ const ScorePage: React.FC = () => {
     );
   }
 
-  const practiceComplete = practice.isActive && practice.currentStep >= practice.totalSteps && practice.totalSteps > 0;
-
   return (
     <div className="score-page">
-      {/* Simplified Header — just back button + title + optional practice badge */}
+      {/* Simplified Header — back button + status of the take */}
       <div className="score-header container">
         <button className="back-btn" onClick={() => navigate('/upload')}>
           <ArrowLeft size={20} />
         </button>
 
-        {practice.isActive && (
+        {(phase === 'countdown' || phase === 'playing') && (
           <div className="practice-status">
             <span className="practice-status-dot" />
-            Practice Mode
+            {phase === 'countdown' ? 'Pronti…' : 'Prova in corso'}
           </div>
         )}
       </div>
@@ -312,29 +353,15 @@ const ScorePage: React.FC = () => {
         )}
         <div ref={containerRef} className="sheet-container" id="sheet-container" />
 
-        {/* Staff toggles — overlaid on the score during practice mode */}
-        {!isLoading && (
-          <StaffToggle
-            isActive={practice.isActive}
-            enabledStaves={practice.enabledStaves}
-            onToggleStaff={practice.toggleStaff}
-          />
+        {/* Countdown. Copre lo spartito per non distrarre: il musicista sta
+            guardando le mani, non la pagina. */}
+        {phase === 'countdown' && (
+          <div className="countdown-overlay">
+            <div className="countdown-value" key={count}>{count > 0 ? count : 'Via'}</div>
+            <p className="countdown-hint">Preparati, si parte fra poco</p>
+          </div>
         )}
       </div>
-
-      {/* Practice complete overlay */}
-      {practiceComplete && (
-        <div className="practice-complete">
-          <h2 className="heading">Bravo! 🎉</h2>
-          <p>You've completed the entire score.</p>
-          <button className="btn btn-primary" onClick={() => void runAnalysis()} disabled={verdict.status === 'working'}>
-            {verdict.status === 'working' ? 'Analisi in corso…' : 'Analizza la prova'}
-          </button>
-          <button className="btn btn-outline" onClick={() => practice.reset()}>
-            Practice Again
-          </button>
-        </div>
-      )}
 
       {/* Verdicts — appear only after the performance has been analysed */}
       {verdict.status !== 'idle' && (
@@ -362,6 +389,9 @@ const ScorePage: React.FC = () => {
                   </li>
                 ))}
               </ul>
+              <button className="btn btn-outline verdict-retry" onClick={() => void handlePlayAlong()}>
+                Suona di nuovo
+              </button>
             </>
           )}
         </section>
@@ -371,12 +401,12 @@ const ScorePage: React.FC = () => {
       {!isLoading && (
         <PlaybackBar
           isPlaying={isPlaying}
-          isPracticeMode={practice.isActive}
+          isTakeActive={phase === 'countdown' || phase === 'playing'}
           isLoading={isLoading}
           progress={progress}
           onPlayPause={handlePlayPause}
           onStop={handleStop}
-          onPracticeToggle={handlePracticeToggle}
+          onPlayAlong={handlePlayAlong}
         />
       )}
     </div>

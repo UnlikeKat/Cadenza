@@ -52,6 +52,16 @@ export interface UseMidiReturn {
   enable: () => Promise<void>;
   selectInput: (inputId: string) => void;
   disable: () => void;
+  /**
+   * Svuota la registrazione e le note attualmente premute.
+   *
+   * Va chiamata all'inizio di ogni prova. Senza, `recording` cresce e basta:
+   * due prove consecutive finirebbero sovrapposte nello stesso payload, e
+   * l'allineatore le leggerebbe come un unico brano. Anche le note premute
+   * vanno svuotate, altrimenti una nota tenuta dal musicista al momento del
+   * countdown resterebbe " premuta" per tutta l'esecuzione.
+   */
+  clearRecording: () => void;
 }
 
 export function useMidi(): UseMidiReturn {
@@ -319,6 +329,12 @@ export function useMidi(): UseMidiReturn {
     };
   }, [isEnabled, attachListeners, trackAttachment]);
 
+  const clearRecording = useCallback(() => {
+    setRecording([]);
+    setEvents([]);
+    setActiveNotes(new Map());
+  }, []);
+
   return {
     isEnabled,
     isSupported,
@@ -333,5 +349,6 @@ export function useMidi(): UseMidiReturn {
     enable,
     selectInput,
     disable,
+    clearRecording,
   };
 }

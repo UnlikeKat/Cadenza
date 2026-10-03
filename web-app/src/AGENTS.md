@@ -17,7 +17,7 @@ Root of the Cadenza web application source tree. Hosts the React entry point, th
 
 - Every route component lives under `pages/`; every reusable presentational component under `components/`; every domain-logic hook under `hooks/`
 - New routes must be registered in `App.tsx` and have a corresponding page component in `pages/`. Register them with `React.lazy` unless the page is on the landing path
-- Do not statically import a page that transitively pulls a heavy vendor chunk: `ScorePage` → `usePracticeMode` → the MusicXML/OSMD stylesheet, and `ScorePage` already `await import('@music-i18n/musicxml-player')` at runtime
+- Do not statically import a page that transitively pulls a heavy vendor chunk: `ScorePage` imports the MusicXML/OSMD stylesheet and already `await import('@music-i18n/musicxml-player')` at runtime
 - The nav header in `App.tsx` is the single source of truth for top-level navigation links
 - Routing state passed between pages uses `react-router-dom` `location.state` (see `UploadPage` → `ScorePage` handoff)
 
@@ -35,6 +35,6 @@ Root of the Cadenza web application source tree. Hosts the React entry point, th
 
 ## Child DOX Index
 
-- `pages/` — Route-level page components (Home, Upload, Score, MetricsTest) and their co-located CSS
-- `components/` — Reusable presentational components (MidiPanel, PlaybackBar, StaffToggle)
-- `hooks/` — Domain-logic hooks (useMidi, usePracticeMode)
+- `pages/` — Route-level page components (Home, Upload, Score) and their co-located CSS
+- `components/` — Reusable presentational components (MidiPanel, PlaybackBar)
+- `hooks/` — Domain-logic hooks (useMidi, useVerdict)

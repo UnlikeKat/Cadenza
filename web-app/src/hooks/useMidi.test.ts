@@ -477,6 +477,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     const r = useRenderHook();
     expect(Object.keys(r).sort()).toEqual([
       'activeNotes',
+      'clearRecording',
       'disable',
       'enable',
       'error',
@@ -486,6 +487,7 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
       'isSupported',
       'lastEvent',
       'lastNote',
+      'recording',
       'selectInput',
       'selectedInput',
     ]);
@@ -752,6 +754,37 @@ describe('useMidi — task 2.1: bounded event stream, rawAttack, export stabilit
     expect(r.selectedInput).toBe(input1);
     expect(r.error).toBeNull();
     expect(r.isEnabled).toBe(true);
+  });
+
+  test('clearRecording() empties recording, the live stream and the held notes, and keeps listening', async () => {
+    // ScorePage calls this when a take starts. Without it a second take would
+    // be appended to the first and the aligner would read both as one piece.
+    const { inputs } = await useCreateHookWithInputs(['input-1']);
+    const [input1] = inputs;
+
+    input1.emit('noteon', makeNoteOn({ number: 60, timestamp: 30 }));
+    input1.emit('noteon', makeNoteOn({ number: 64, timestamp: 40 }));
+    input1.emit('noteoff', makeNoteOff(90, 60));
+    input1.emit('controlchange', makeControlChange(50, 64, 127));
+    let r = useRenderHook();
+    expect(r.recording.length).toBe(4);
+    expect(r.events.length).toBe(4);
+    expect(r.activeNotes.size).toBe(1); // note 64 is still held
+
+    r.clearRecording();
+    r = useRenderHook();
+    expect(r.recording).toEqual([]);
+    expect(r.events).toEqual([]);
+    // A note held across the countdown would otherwise stay held for the whole
+    // take, and its note-off would close an attack that no longer exists.
+    expect(r.activeNotes.size).toBe(0);
+
+    // Still listening: clearing must not detach anything.
+    expect(r.isEnabled).toBe(true);
+    expect(input1.listenerCount('noteon')).toBeGreaterThan(0);
+    input1.emit('noteon', makeNoteOn({ number: 67, timestamp: 200 }));
+    r = useRenderHook();
+    expect(r.recording.length).toBe(1);
   });
 
   test('disable() clears the stream, note state, selection, and this instance\'s global listeners', async () => {

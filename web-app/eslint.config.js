@@ -40,7 +40,7 @@ export default defineConfig([
     // `any` by necessity, not by laziness. Typing the boundary is the real fix.
     // ponytail: re-enable once opensheetmusicdisplay is migrated to
     // vi.mock/typed wrappers; tracked in pages/AGENTS.md.
-    files: ['src/hooks/usePracticeMode.ts', 'src/pages/ScorePage.tsx'],
+    files: ['src/pages/ScorePage.tsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
     },
