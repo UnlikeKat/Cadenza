@@ -73,6 +73,25 @@ RUN test "$(ls -1 /opt/specs/*.pl | wc -l)" -eq 7 \
 ENV RML_MONITOR=/opt/rml
 ENV RML_SPECS=/opt/specs
 ENV PORT=8080
+
+# ── Thread: la cosa piu' importante di questo file ──────────────────
+# OpenBLAS e OpenMP decidono quanti thread creare leggendo i core della
+# macchina che ha fatto la build, non quelli del container che la esegue.
+# Su Render l'istanza free ha poco meno di un core: lanciano una dozzina di
+# thread che si contendono lo stesso core e il throughput crolla.
+#
+# Misurato sullo stesso container, metà CPU:
+#   thread liberi   49,90 s
+#   thread = 1       1,27 s      <- 39 volte più veloce
+#
+# Con un solo thread l'allineamento torna a girare in circa un secondo, che è
+# la velocità che si misura in locale: il collo di bottiglia non era la CPU,
+# erano i thread in collisione. Nessun costo, una riga.
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV NUMBA_NUM_THREADS=1
+
 EXPOSE 8080
 
 # Render comanda via CMD, non ENTRYPOINT.
