@@ -15,6 +15,10 @@ services:
     dockerfilePath: ./service/Dockerfile
     dockerContext: .
     plan: free
+    # Frankfurt, non il default Oregon: il giudizio arriva subito dopo che
+    # l'allievo ha finito di suonare, e ogni andata e ritorno in più si sente.
+    region: frankfurt
+    branch: main
     healthCheckPath: /
     autoDeployTrigger: commit
     envVars:
