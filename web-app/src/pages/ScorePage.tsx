@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useMidi } from '../hooks/useMidi';
 import { usePracticeMode } from '../hooks/usePracticeMode';
+import { useVerdict } from '../hooks/useVerdict';
 import PlaybackBar from '../components/PlaybackBar';
 import StaffToggle from '../components/StaffToggle';
 import './ScorePage.css';
@@ -11,6 +12,17 @@ import './ScorePage.css';
 let Player: any = null;
 let OpenSheetMusicDisplayRenderer: any = null;
 let VerovioConverter: any = null;
+
+/** Nomi leggibili delle sette metriche. La chiave è il nome del file .rml. */
+const METRIC_LABELS: Record<string, string> = {
+  articulation: 'Articolazione',
+  'chord-jitter': 'Sincronia degli accordi',
+  'dynamics-adherence': 'Adesione alla dinamica',
+  'pedal-toggle': 'Pedale',
+  'pitch-agreement': 'Corrispondenza delle altezze',
+  'pitch-range': 'Estensione',
+  'syncopated-pedal': 'Pedale sincopato',
+};
 
 const ScorePage: React.FC = () => {
   const location = useLocation();
@@ -34,6 +46,20 @@ const ScorePage: React.FC = () => {
 
   // Practice mode hook — pass OSMD instance ref
   const practice = usePracticeMode(osmdRef, midi.activeNotes);
+
+  // Verdicts — the seven RML specs, computed server-side. The verdict is not
+  // decided here: this hook only carries the performance over and reads the
+  // answer back.
+  const verdict = useVerdict(midi.recording);
+  const runAnalysis = useCallback(async () => {
+    if (!file) return;
+    try {
+      const scoreXml = await file.text();
+      await verdict.analyse(scoreXml);
+    } catch (err) {
+      console.error('[ScorePage] Non sono riuscito a leggere lo spartito:', err);
+    }
+  }, [file, verdict]);
 
   // Re-enable MIDI from upload page state
   useEffect(() => {
@@ -301,10 +327,44 @@ const ScorePage: React.FC = () => {
         <div className="practice-complete">
           <h2 className="heading">Bravo! 🎉</h2>
           <p>You've completed the entire score.</p>
-          <button className="btn btn-primary" onClick={() => practice.reset()}>
+          <button className="btn btn-primary" onClick={() => void runAnalysis()} disabled={verdict.status === 'working'}>
+            {verdict.status === 'working' ? 'Analisi in corso…' : 'Analizza la prova'}
+          </button>
+          <button className="btn btn-outline" onClick={() => practice.reset()}>
             Practice Again
           </button>
         </div>
+      )}
+
+      {/* Verdicts — appear only after the performance has been analysed */}
+      {verdict.status !== 'idle' && (
+        <section className="verdict-panel">
+          <div className="verdict-panel-head">
+            <h2 className="heading">Il verdetto</h2>
+            {verdict.status === 'done' && (
+              <button className="btn btn-outline" onClick={verdict.reset}>Chiudi</button>
+            )}
+          </div>
+
+          {verdict.status === 'working' && <p className="verdict-note">Allineamento e verifica delle sette regole…</p>}
+
+          {verdict.status === 'error' && <p className="verdict-note verdict-error">{verdict.error}</p>}
+
+          {verdict.status === 'done' && verdict.verdicts && (
+            <>
+              <p className="verdict-note">{verdict.noteCount} note analizzate</p>
+              <ul className="verdict-list">
+                {Object.entries(verdict.verdicts).map(([key, v]) => (
+                  <li key={key} className={v.ok ? 'verdict-ok' : 'verdict-bad'}>
+                    <span className="verdict-mark">{v.ok ? '✓' : '✗'}</span>
+                    <span className="verdict-name">{METRIC_LABELS[key] ?? key}</span>
+                    <span className="verdict-detail">{v.ok ? 'conforme' : 'violata'}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
       )}
 
       {/* Floating Bottom Bar — always visible */}

@@ -1,0 +1,15 @@
+# Il repo veniva clonato su Windows con core.autocrlf=true e senza regole:
+# tutti gli script di shell diventavano CRLF. Il sintomo era
+#   /bin/sh: 1: ./gradlew: not found
+# perche' la shebang diventava "#!/bin/sh\r", un interprete che non esiste.
+
+* text=auto
+
+# vanno eseguiti in un container Linux: LF obbligatorio
+*.sh    text eol=lf
+gradlew text eol=lf
+
+# specifiche RML e Prolog: il confronto e' byte per byte con la compilazione
+# locale, quindi i fine-riga non devono cambiare
+*.rml   text eol=lf
+*.pl    text eol=lf

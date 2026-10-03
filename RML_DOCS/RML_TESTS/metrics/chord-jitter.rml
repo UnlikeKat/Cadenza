@@ -1,24 +1,67 @@
-// Metrica: Chord Jitter (Accordi < 30ms)
-// FR-004: Le note di un accordo (C4=60, E4=64) devono essere premute
-// entro 30ms l'una dall'altra, in qualsiasi ordine.
+// Metric: chord-jitter
+// FR-004: le note che lo spartito chiede di premere NELLO STESSO ISTANTE devono
+// essere suonate entro 30 ms l'una dall'altra.
+//
+// PRIMA ERA CABLATA A MANO, su un accordo di prova:
+//
+//     chordNote matches noteOnT(60, _) | noteOnT(64, _);
+//     Chord = {let t1; (noteOnT(60,t1) near(64,t1)) \/ (noteOnT(64,t1) near(60,t1))};
+//     Main = chordNote >> Chord*;
+//
+// Su un brano che non contiene un C4+E4 la traccia veniva scartata dal filtro
+// >> e la metrica diceva "ok" senza aver guardato niente.
+//
+// I DATI VENGONO DALLO SPARTITO, tre campi prodotti dal JOIN:
+//   expected.chordMates  gli altri pitch che vanno premuti nello stesso istante.
+//                       Lista VUOTA se questa nota non ha compagni.
+//   expected.chordId     l'istante di partitura a cui appartiene
+//   timestamp            quando la nota e' davvero suonata
+//
+// La lista dei compagni e' la cosa che conta, e NON il suo numero. La
+// versione precedente ragionava su un conteggio (chordSize == 2) e aveva due
+// difetti: un accordo a 3 note avrebbe richiesto un caso speciale, e il gruppo
+// veniva ricavato dalla battuta allineata, che e' un'approssimazione.
+//
+// Sul problema della lista vuota: deep_subdict/2 confronta le liste elemento per
+// elemento a lunghezza uguale, quindi in principio non dovrebbe poter
+// confrontare "questa lista e' vuota". In realta il pattern _{chordMates:[]}
+// compila e il monitor lo distingue correttamente dalla lista non vuota:
+// verificato eseguendo la specifica sulle due tracce. E' cio' che permette a
+// questa regola di non aver bisogno di un contatore.
 
-// noteOnT: noteon con estrazione del numero nota e del timestamp.
-noteOnT(num, ts) matches {type:'noteon', note:{number:num}, timestamp:ts};
+// Nota che nello spartito non ha compagni: puo' arrivare quando le pare.
+soloNote matches {type:'noteon', expected:{chordMates:[]}};
+soloNote matches soloNote(_);
 
-// near: nota MIDI n premuta entro 30ms dal tempo di riferimento t1.
-// Pattern 'check_der': il vincolo with confronta il timestamp dell'evento
-// corrente con un parametro legato da un evento precedente.
-near(n, t1) matches noteOnT(n, t2) with abs(t2 - t1) < 30;
+// Nota che ha compagni da premere insieme, con l'istante di partitura e il
+// momento in cui e' suonata. `_` dentro chordMates non lo confronta: dice
+// solo "qui c'era qualcosa", che e' gia' garantito dal soloNote sopra.
+chordNote(cid, ts) matches
+    {type:'noteon', expected:{chordId:cid, chordMates:_}, timestamp:ts};
 
-// chordNote: qualsiasi nota dell'accordo target (per il filtro >>).
-chordNote matches noteOnT(60, _) | noteOnT(64, _);
+// Qualsiasi evento che non sia un attacco: noteoff, controlchange del pedale.
+// Il filtro >> li scarta dalla traccia che questa regola guarda, quindi non
+// serve la regola "other" che li facesse passare senza giudicarli. Il filtro
+// e' dichiarato PRIVO di vincoli: se portasse dentro la condizione di accordo,
+// scarterebbe le note da giudicare invece di segnalarle.
+anyNoteOn matches {type:'noteon'};
 
-// Chord: coppia C4+E4 entro 30ms in qualsiasi ordine.
-// Le due alternative (unione \/) coprono i due ordini di arrivo;
-// let lega t1 al timestamp della prima nota dell'accordo.
-// Nota: le equazioni richiedono un identificatore maiuscolo (expId della grammatica).
-Chord = {let t1; (noteOnT(60,t1) near(64,t1)) \/ (noteOnT(64,t1) near(60,t1))};
+// seconda nota dello stesso istante, entro 30 ms dalla prima.
+// c e t1 sono legati dal chiamante con let.
+mateOf(c, t1) matches chordNote(c, t2) with abs(t2 - t1) < 30;
 
-// Main: filtra lo stream alle sole note dell'accordo e verifica
-// che ogni coppia arrivi entro 30ms.
-Main = chordNote >> Chord*;
+mateOf matches mateOf(_, _);
+
+// Un accordo: due note dello stesso istante di partitura, entro 30 ms.
+// Lo spartito di prova non contiene accordi da 3 note, e una variante per tre
+// sarebbe codice mai esercitato: quando serve, si aggiunge insieme alla traccia
+// che la prova.
+Chord2 = {let c, t1; chordNote(c, t1) mateOf(c, t1)};
+
+// Ogni attacco e' o una nota senza compagni, o un accordo tenuto stretto.
+// Il membro dell'alternativa e' obbligato: una nota con compagni non puo'
+// essere trattata come singola, altrimenti nessun accordo strappato passerebbe
+// mai inosservato.
+//
+// Nota: l'unione fra espressioni e' `\/`, non `|`.
+Main = anyNoteOn >> (soloNote \/ Chord2)*;

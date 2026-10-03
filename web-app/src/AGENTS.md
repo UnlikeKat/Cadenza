@@ -7,8 +7,9 @@ Root of the Cadenza web application source tree. Hosts the React entry point, th
 ## Ownership
 
 - Entry point: `main.tsx` mounts `<App />` into `#root` under `React.StrictMode`
-- `App.tsx` defines the `BrowserRouter` and the four routes (`/`, `/upload`, `/score`, `/metrics-test`) plus the global nav header
-- `App.tsx` loads `UploadPage`, `ScorePage` and `MetricsTestPage` through `React.lazy` inside a single `<Suspense fallback={<div className="route-loading" />}>`; only `HomePage` is a static import. This is what keeps the 11 MB `@music-i18n/musicxml-player` chunk out of the landing-page load
+- `App.tsx` defines the `BrowserRouter` and the three routes (`/`, `/upload`, `/score`) plus the global nav header
+- `App.tsx` loads `UploadPage` and `ScorePage` through `React.lazy` inside a single `<Suspense fallback={<div className="route-loading" />}>`; only `HomePage` is a static import. This is what keeps the 11 MB `@music-i18n/musicxml-player` chunk out of the landing-page load
+- The `/metrics-test` route and `MetricsTestPage` were removed: it recomputed six metrics in TypeScript with thresholds hardcoded in the page, duplicating the ones inside the RML `.rml` specs. Verdicts now come from the service through `useVerdict` and are rendered by `ScorePage`. Do not reintroduce in-browser thresholds
 - `App.css` holds app-shell layout (header, nav, wrapper) and the `.route-loading` Suspense fallback
 - `index.css` is the global stylesheet imported once at boot
 

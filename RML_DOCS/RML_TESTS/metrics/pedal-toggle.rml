@@ -1,37 +1,59 @@
 // Metric: pedal-toggle
-// Rileva eventi controlchange del controller 64 (pedale sustain) e distingue
-// pressione (value == 127) da rilascio (value == 0).
+// FR-003: il pedale sustain viene premuto e rilasciato, e ogni pressione
+// deve essere chiusa da un rilascio.
+//
+// Il controller 64 non e' cablato a caso: e' il sustain definito dallo standard
+// MIDI General MIDI, lo stesso su ogni tastiera. E' l'unico numero che ha
+// diritto di stare qui dentro.
+//
+// LA PRESSIONE DEVE CADERE DOVE LO SPARTITO CHIEDE IL PEDALE. Il JOIN annota
+// ogni controlchange con expected.pedal, che vale true quando lo spartito ha un
+// <pedal> attivo in quel punto. Una pressione fuori da li' e' premuta senza
+// che la partitura la chieda, e questa specifica la segnala.
+//
+// Ogni evento e' uno di tre: un evento che non riguarda il pedale, una
+// pressione-rilascio chiusa, o ... nient'altro. Non esiste il caso "pressione
+// senza rilascio": una pressione accettata da sola lascerebbe il pedale
+// premuto per sempre, che e' esattamente il difetto che questa metrica cerca.
 
-// controlChange: fa match con qualsiasi evento 'controlchange',
-// estraendo il numero del controller e il valore.
-controlChange(ctrl, val) matches {type:'controlchange', controller:ctrl, value:val};
+anyCC64(ctrl, val) matches {type:'controlchange', controller:ctrl, value:val};
 
-// Alias wildcard: fa match con qualsiasi evento controlChange (arity-0).
-// Due parametri richiedono due wildcard.
-controlChange matches controlChange(_, _);
+// alias a zero argomenti: serve per il filtro sotto
+anyCC64 matches anyCC64(_, _);
 
-// sustainPedal: filtra gli eventi controlchange con controller == 64.
-sustainPedal(val) matches controlChange(64, val);
+// un pressione che lo spartito NON prescrive
+other not matches anyCC64;
 
-// Alias arity-0: un parametro richiede un wildcard.
-sustainPedal matches sustainPedal(_);
+pedalPress matches anyCC64(64, 127);
+pedalRelease matches anyCC64(64, 0);
 
-// pedalPress: rileva la pressione del pedale.
-// Il pedale e' considerato premuto quando value == 127.
-pedalPress(val) matches sustainPedal(val) with val == 127;
+// NotA: l'obbligo "premi dove lo spartito chiede" non e' esprimibile qui dentro.
+// Una specifica guardando un solo flusso non puo' dire che un evento manca: puo'
+// solo dire che quelli presenti sono leciti o che sono illegali. Quell'obbligo
+// sta in syncopated-pedal.rml, che ha un modo per chiederlo.
 
-// Alias arity-0.
-pedalPress matches pedalPress(_);
+// Tra la pressione e il rilascio puo' passare tutto quello che vuoi: uno span
+// di pedale copre in media sei note, e su questo brano arriva a coprirne
+// parecchie. Se la coppia fosse richiesta adiacente, il primo noteoff dopo la
+// pressione romperebbe la regola.
+//
+// Il tipo si chiama `filler` e non e' una unione scritta tra parentesi per una
+// ragione concreta: scrivendo
+//     Toggle = pedalPress (anyNote \/ otherCC)* pedalRelease;
+// il compilatore emetteva `pedalPress_et*(star((anyNote_et\/otherCC_et)))`,
+// dove quell'asterisco dopo pedalPress e' uno star di Kleene e non una
+// concatenazione: la regola risultava piu' permissiva del previsto e la traccia
+// non chiudeva. Con lo star su un tipo dichiarato, come in
+//     Toggle = pedalPress filler* pedalRelease;
+// l'asterisco e' quello che voglio.
+//
+// filler NON include i controlchange: se includesse il rilascio, potrebbe
+// consumarlo al posto di pedalRelease e lasciare la coppia aperta. Qui il
+// brano emette solo CC64, quindi i filler sono note e noteoff.
+filler matches {type:'noteon'};
+filler matches {type:'noteoff'};
 
-// pedalRelease: rileva il rilascio del pedale.
-// Il pedale e' considerato rilasciato quando value == 0.
-pedalRelease(val) matches sustainPedal(val) with val == 0;
+Toggle = pedalPress filler* pedalRelease;
 
-// Alias arity-0.
-pedalRelease matches pedalRelease(_);
-
-// pedalEvent: unione di pressione e rilascio del pedale.
-pedalEvent matches pedalPress | pedalRelease;
-
-// Main accetta una sequenza di zero o piu' eventi pedalEvent.
-Main = pedalEvent*;
+// L'unione fra espressioni e' `\/`.
+Main = (other \/ Toggle)*;

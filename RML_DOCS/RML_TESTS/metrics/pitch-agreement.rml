@@ -1,0 +1,69 @@
+// Metric: pitch-agreement
+// La nota che suoni e' una di quelle che lo spartito chiede in quel punto?
+//
+// Questa e' la metrica che mostra il motivo per cui esiste il JOIN.
+// RML monitora UN solo flusso di eventi: non ha un modo di ricevere due flussi
+// e metterli in relazione. Per dire "questa nota e' giusta" servirebbe lo
+// spartito, che non c'e'.
+//
+// ATTENZIONE ALLA DOCUMENTAZIONE. La guida ufficiale elenca fra gli operatori
+// il filtro >> e il filtro condizionale, che correlano eventi portando una
+// chiave condivisa: e' il meccanismo che uso in chord-jitter (let su c) e in
+// syncopated-pedal. Quindi RML sa correlare eventi, e dire il contrario e'
+// sbagliato. Quello che non ha e' il join fra due input, ed e' il motivo
+// per cui join.py esiste: unisce spartito ed esecuzione in una traccia unica,
+// e da li' in poi il lavoro e' tutto di RML.
+//
+// PERCHE' IL JOIN EMETTE UNA DISTANZA E NON UNA LISTA.
+// Il campo che servirebbe e' expected.pitches, la lista dei pitch che lo
+// spartito prevede in quel punto. Ma deep_subdict/2 confronta le liste elemento
+// per elemento a lunghezza uguale: non puo' esprimere "il numero suonato
+// appartiene a questa lista". Provarlo non serve, e' il motivo per cui la
+// versione con la lista non e' mai stata scritta.
+//
+// Il JOIN emette invece expected.pitchDist: la distanza in semitoni fra la nota
+// suonata e la nota attesa piu' vicina. E' un numero, e RML lo confronta con un
+// `with` come qualsiasi altro.
+//
+// NON E' UN APPROSSIMAMENTO CHE NASCONDE L'ERRORE. Distanza 0 significa
+// esattamente "hai suonato una nota che lo spartito contiene qui". E' la stessa
+// informazione della lista, codificata in una forma che il formalism sa
+// trattare. Chi decide se 0 e' accettabile e' questa specifica, non il JOIN.
+//
+// expected.pitchDist e' null quando lo spartito non prevede nessuna nota in
+// quel punto: e' un fatto assente, non uno zero, e va trattato per conto suo.
+
+noteOn(num, dist) matches
+    {type:'noteon', note:{number:num}, expected:{pitchDist:dist}};
+
+// NOTA SULLA SINTASSI: scrivere `with dist == 0` NON funziona. Il compilatore
+// lo traduce in {(Dist =:= 0)}, e `=:=` e' aritmetica Prolog, non CLP(Q):
+// dentro le graffe viene valutata subito, mentre Dist non e' ancora legato da
+// deep_subdict. Il predicato fallisce su tutte le note, e la specifica boccia
+// anche la traccia buona. L'uguaglianza si scrive con i due operatori di
+// disuguaglianza, che il compilatore emette come vincoli CLP(Q) differiti.
+inScore(num) matches noteOn(num, dist) with dist >= 0 && dist <= 0;
+
+// alias a zero argomenti: senza questo, Main che scrive `inScore` sta
+// indicando un tipo che non esiste, e la specifica boccia anche la traccia
+// buona. Il compilatore genera l'alias da solo solo per i tipi che dichiari
+// senza parametri, non per quelli dichiarati con un parametro.
+inScore matches inScore(_);
+
+// nota suonata che lo spartito non prevedeva in quel punto: nessun vincolo,
+// perche' non c'e' nulla con cui confrontarla
+unmatchedNote matches noteOn(_, null);
+
+// tutto il resto della traccia: noteoff, controlchange del pedale. Il filtro
+// >> li scarta: questa metrica guarda solo gli attacchi.
+anyNoteOn matches {type:'noteon'};
+
+// ORDINE DELLE ALTERNATIVE. unmatchedNote va PRIMA di inScore. Prolog prova le
+// alternative nell'ordine in cui sono scritte e non indietreggia dopo un
+// errore: se inScore fosse provata per prima, su una nota senza corrispondenza
+// in partitura riceverebbe Dist = null e la costruzione {Dist >= 0} solleverebbe
+// "Type error: clpr_expression expected, found null". Il verdetto restava
+// corretto perche' il monitor recupera e passa all'alternativa successiva, ma
+// l'errore sporca stderr e faceva abortare la suite. Qualsiasi costruzione
+// `with` va protetta dal valore null: va trattata prima, non dopo.
+Main = anyNoteOn >> (unmatchedNote \/ inScore)*;

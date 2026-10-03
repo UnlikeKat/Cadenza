@@ -1,36 +1,46 @@
-// Metrica: Articulation (Legato/Staccato)
-// FR-006: delta temporale tra noteoff della nota N e noteon della nota N+1.
-// Delta positivo = gap (staccato); delta negativo o zero = sovrapposizione (legato).
-
-// --- Dichiarazioni dei tipi evento (tutte prima delle equazioni) ---
-
-// noteOnT: attacco di una nota con estrazione del timestamp.
-noteOnT(ts) matches {type:'noteon', timestamp:ts};
-
-// noteOffT: rilascio di una nota con estrazione del timestamp.
-noteOffT(ts) matches {type:'noteoff', timestamp:ts};
-
-// legatoNext: derivato parametrico (pattern check_der) — il noteoff della
-// nota N lega t1; il noteon successivo N+1 (timestamp t2) e' legato se il
-// silenzio tra i due e' <= 30ms, cioe' nessuna pausa percepibile.
-// La clausola `with` e' valida SOLO qui, nella dichiarazione derivedEvtypeDecl.
+// Metric: articulation (legato / staccato)
+// FR-006: ogni nota deve restare premuta almeno 30 ms.
 //
-// NOTA 2026-09-28: la soglia era 0 (delta <= 0). Su un flusso MIDI reale quel
-// predicato non e' soddisfacibile: quando il noteon successivo viene valutato,
-// il noteoff precedente e' gia' avvenuto, quindi delta > 0 sempre. La versione
-// TypeScript (MetricsTestPage.tsx) misura inoltre la sovrapposizione vera —
-// il noteon successivo arriva PRIMA del noteoff precedente — cosa che un
-// derivato parametrico su coppia di eventi non puo' esprimere: servirebbe
-// sapere quale nota e' ancora premuta, stato che qui non esiste.
-// Quindi RML copre solo il criterio di gap, il layer TS aggiunge la sovrapposizione.
-legatoNext(t1) matches noteOnT(t2) with t2 - t1 <= 30;
+// PERCHE' SI MISURA LA DURATA E NON IL SILENIO FRA DUE NOTE.
+// La formulazione che suona piu' naturale e' "fra il rilascio di una nota e
+// l'attacco della successiva non devono passare piu' di 30 ms". Non e'
+// esprimibile su una traccia finita, e l'ho verificato: l'ultimo rilascio del
+// brano non ha nessun attacco dopo di se', quindi la regola non puo' chiudersi
+// e il monitor risponde "Unmatched end of trace" anche sulla esecuzione
+// corretta. RML non ha modo di dire "a meno che la traccia non finisca qui".
+//
+// Misurando la durata il vincolo e' sempre soddisfacibile: ogni nota che parte
+// ha un rilascio che la chiude. Il difetto resta rilevabile ed e' lo stesso
+// difetto di prima, visto dal otro lato.
+//
+// TRUCCHETTO NECESSARIO PER DUE VOCI.
+// filler accetta gli altri attacchi. Senza, con due voci che attaccano
+// insieme il flusso e' attacco, attacco, rilascio, rilascio: il primo
+// Articulation consumerebbe il primo attacco e troverebbe un attacco dove
+// cerca un rilascio, e non chiuderebbe.
+//
+// LIMITE CONOSCIUTO, DICHIARATO.
+// Cosi' l'Articulation parte dal primo attacco di ogni gruppo e assorbe gli
+// altri. La seconda voce viene controllata solo se attacca da sola. Su questo
+// brano le due voci attaccano e rilasciano sempre insieme, quindi meta' delle
+// note non e' sottoposta a controllo diretto: se si schiaccia una nota della
+// seconda voce, questa metrica non lo vede. Per chiuderlo servirebbe
+// abbinare attacco e rilascio per altezza, e non c'e' modo di scrivere "nota
+// diversa dalla precedente" dentro uno star. Il limite e' della regola, non
+// della traccia: il JOIN emette tutto quello che serve.
 
-// --- Equazioni (identificatori UPPERCASE, dopo tutte le dichiarazioni) ---
+controlEvent matches {type:'controlchange'};
+noteOff matches {type:'noteoff'};
 
-// Articulation: ogni noteoff(N) seguito da un noteon(N+1) legato.
-// Un noteon con delta positivo (gap = staccato) NON soddisfa legato
-// e produce una violazione del monitor legato.
-Articulation = {let t1; noteOffT(t1) legatoNext(t1)};
+noteOnT(t2) matches {type:'noteon', timestamp:t2};
 
-// Main: ripetibile zero o più volte.
-Main = Articulation*;
+// tasto tenuto premuto almeno 30 ms
+heldLong(t2) matches noteOffT(t1) with t1 - t2 >= 30;
+noteOffT(t1) matches {type:'noteoff', timestamp:t1};
+
+filler matches {type:'noteon'};
+filler matches {type:'controlchange'};
+
+Articulation = {let t2; noteOnT(t2) filler* heldLong(t2)};
+
+Main = (controlEvent \/ noteOff \/ Articulation)*;

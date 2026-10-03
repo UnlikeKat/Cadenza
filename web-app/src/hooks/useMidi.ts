@@ -24,6 +24,11 @@ export interface MidiEvent {
 /** Maximum number of events retained in the bounded stream (oldest dropped first). */
 const EVENTS_CAP = 500;
 
+/** Tetto della registrazione che viene analizzata. Alto abbastanza da non
+ *  tagliare un brano, basso abbastanza da non crescere senza limite se la pagina
+ *  resta aperta con la tastiera collegata per ore. */
+const RECORDING_CAP = 20000;
+
 export interface UseMidiReturn {
   isEnabled: boolean;
   isSupported: boolean;
@@ -33,6 +38,16 @@ export interface UseMidiReturn {
   lastNote: MidiNote | null;
   lastEvent: MidiEvent | null;
   events: MidiEvent[];
+  /**
+   * Esecuzione completa, senza troncamento. `events` e' un flusso di INTERFACCIA
+   * e perde la coda vecchia oltre EVENTS_CAP; questa e' la registrazione che
+   * viene analizzata, e non puo' perdere una nota. Un brano da 216 note produce
+   * 434 eventi: gia' oltre il tetto.
+   *
+   * Stabilita per identita' e mutata sul posto, quindi non causa render. Va
+   * letta al momento dell'analisi, non sottoscritta.
+   */
+  recording: MidiEvent[];
   error: string | null;
   enable: () => Promise<void>;
   selectInput: (inputId: string) => void;
@@ -52,6 +67,7 @@ export function useMidi(): UseMidiReturn {
   const selectedInputRef = useRef<Input | null>(null);
   // Every port this hook has subscribed to, so cleanup detaches exactly these.
   const attachedInputsRef = useRef<Input[]>([]);
+  const [recording, setRecording] = useState<MidiEvent[]>([]);
 
   // Record subscriptions and make the selection follow the port that actually
   // delivers. A Bluetooth bridge enumerates as two ports (A/B) where only one
@@ -77,6 +93,10 @@ export function useMidi(): UseMidiReturn {
   // Append to the bounded stream with functional setState so rapid chord-speed
   // input is never dropped between React renders (never reads stale state).
   const appendEvent = useCallback((event: MidiEvent) => {
+    setRecording(prev => {
+      const next = [...prev, event];
+      return next.length > RECORDING_CAP ? next.slice(next.length - RECORDING_CAP) : next;
+    });
     setEvents(prev => {
       const next = [...prev, event];
       return next.length > EVENTS_CAP ? next.slice(next.length - EVENTS_CAP) : next;
@@ -216,6 +236,7 @@ export function useMidi(): UseMidiReturn {
     setLastNote(null);
     setLastEvent(null);
     setEvents([]);
+    setRecording([]);
   }, []);
 
   // Listener ownership: attachment lives in the SETUP, not only in cleanup, so
@@ -307,6 +328,7 @@ export function useMidi(): UseMidiReturn {
     lastNote,
     lastEvent,
     events,
+    recording,
     error,
     enable,
     selectInput,

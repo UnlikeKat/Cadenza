@@ -1,0 +1,28 @@
+# Senza questo il contesto Docker è di circa 480 MB: node_modules da solo sono
+# 318 MB e RML_DOCS 165 MB. Su Render Free questo è tempo di build sprecato.
+
+# ── Dipendenze e artefatti ──────────────────────────────
+web-app/node_modules
+web-app/dist
+node_modules
+dist
+.git
+.gitignore
+
+# ── Cose presenti nel repo ma inutili al servizio ───────
+# il compiler serve solo se si compila da sorgente; vedi service/Dockerfile
+RML_DOCS/RML_TESTS/compiler/.gradle
+RML_DOCS/RML_TESTS/compiler/build
+RML_DOCS/RML_TESTS/running_examples
+RML_DOCS/RML_TESTS/midi-probe
+
+# ── Non serve al container ───────────────────────────────
+**/*.md
+*.musicxml
+web-app/index.html
+web-app/public
+web-app/src
+web-app/package.json
+web-app/tsconfig*.json
+web-app/vite.config.*
+web-app/eslint.config.js

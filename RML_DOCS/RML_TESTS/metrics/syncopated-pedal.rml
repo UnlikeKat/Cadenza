@@ -1,38 +1,61 @@
-// Metrica: Syncopated Pedal (Pedale Sincopato)
-// FR-005: Il pedale sustain (controller 64) viene premuto (value=127)
-// entro 200ms dall'attacco di una nota, tollerando eventi intermedi.
-// Commenti esplicativi in italiano.
+// Metric: syncopated-pedal
+// FR-005 RISCRITTA. La versione precedente chiedeva una pressione di pedale
+// dopo OGNI nota:
+//
+//     Pedal = {let t1; noteOnT(t1) other* pedalSoon(t1)};
+//     Main = Pedal*;
+//
+// Su due righe di test sembrava sensata. Sul brano vero sono 216 note e 16 span
+// di pedale: la regola avrebbe chiesto al pianista 216 pressioni in 32 battute.
+// Non era una specifica musicale, era una specifica che non poteva stare in
+// piedi.
+//
+// LA NUOVA VERSIONE LEGGE LO SPARTITO. In MusicXML il pedale e' scritto: c'e'
+// il punto in cui va premuto, la sezione in cui resta premuto, e il punto in
+// cui va rilasciato. Sono i <pedal> dentro <direction>, 16 in questo brano.
+// Il JOIN ne ricava 16 span e annota ogni nota con expected.pedal, che vale
+// true quando lo spartito ha il pedale attivo in quel punto.
+//
+// QUI NASCE LA REGOLA: se suoni una nota mentre lo spartito chiede il pedale,
+// devi aver premuto il pedale. Non dopo ogni nota, ma solo dove la partitura
+// lo prescrive.
+//
+// PERCHE' QUESTO E' POSSIBILE IN RML, CONTRASTO CON LE ALTRE SPECIFICHE.
+// Una specifica su un flusso singolo non puo' dire che un evento manca: puo'
+// solo dire che quelli presenti sono leciti o illegali. Qui pero' l'obbligo e'
+// ancorato a un evento che c'e' davvero, la nota. La nota e' un fatto; il
+// pedale e' l'obbligo che quel fatto genera. Se la pressione manca, non c'e'
+// nessun modo di consumare la nota, e la traccia si blocca. E' la stessa
+// tecnica di chord-jitter: la nota non puo' essere trattata come elemento
+// singolo se lo spartito dice che ha un compagno.
 
-// --- Dichiarazioni dei tipi evento (tutte prima delle equazioni) ---
+// nota suonata in un punto in cui lo spartito chiede il pedale
+notePedal matches {type:'noteon', expected:{pedal:true}};
+notePedal matches {type:'noteoff', expected:{pedal:true}};
 
-// noteOnT: cattura l'attacco di una nota con il suo timestamp.
-// Estrae solo il timestamp perche' la metrica non dipende dall'altezza.
-noteOnT(ts) matches {type:'noteon', timestamp:ts};
+// nota suonata dove lo spartito non chiede nulla: libera, nessun obbligo
+plainNote matches {type:'noteon', expected:{pedal:false}};
+plainNote matches {type:'noteoff', expected:{pedal:false}};
 
-// pedalOn: cattura la pressione del pedale sustain con timestamp.
-// controller:64 e' il pedale sustain; value:127 indica pressione piena
-// (valore LETTERALE come da FR-005, non una soglia >= 64).
-pedalOn(ts) matches {type:'controlchange', controller:64, value:127, timestamp:ts};
+pedalPress matches {type:'controlchange', controller:64, value:127};
+pedalRelease matches {type:'controlchange', controller:64, value:0};
 
-// pedalSoon: derivato parametrico (pattern check_der) — il pedale premuto
-// con timestamp t2 deve cadere entro 200ms dopo l'attacco della nota t1.
-// La clausola `with` e' valida SOLO nelle dichiarazioni matches
-// (derivedEvtypeDecl): qui confronta il timestamp dell'evento corrente (t2)
-// con il parametro t1 legato dalla nota precedente. Mai dentro le equazioni.
-pedalSoon(t1) matches pedalOn(t2) with t2 > t1 && t2 - t1 < 200;
+// LA REGOLA. Una regione di pedale dello spartito e' fatta cosi': la
+// pressione, e poi TUTTE le note che lo spartito tiene coperte, fino a quando
+// smette di chiederlo.
+//
+// Il punto delicato e' che `notePedal` compare due volte, e la seconda come
+// `notePedal*`: la prima nota sotto pedale DEVE essere preceduta dalla
+// pressione, le successive no. Senza quel doppio ruolo si chiederebbe una
+// pressione per ogni nota, che e' l'errore della versione precedente: dopo la
+// prima pressione il pedale e' gia' giù e pestarlo 216 volte non ha senso.
+//
+// E se la pressione manca? Nessuna Region puo' iniziare, e la nota non puo'
+// essere consumata da nessun altro membro di Main. La traccia si blocca. E' il
+// meccanismo che rende esprimibile un obbligo: in RML non si puo' dire che un
+// evento manca, ma si puo' dire che un evento presente non ha con se' quello
+// che doveva precederlo.
+Region = pedalPress notePedal notePedal*;
 
-// other: qualsiasi evento che non sia attacco di nota o pressione pedale.
-// La negazione `not matches` tollera gli eventi intermedi tra la nota
-// e la pressione del pedale (noteoff, altri controller, ecc.).
-other not matches noteOnT(_) | pedalOn(_);
-
-// --- Equazioni (identificatori UPPERCASE, dopo tutte le dichiarazioni) ---
-
-// Pedal: attacco nota, poi eventuali eventi intermedi (other*),
-// poi pedale entro 200ms. Il blocco {let t1; ...} lega t1 al timestamp
-// della nota e lo riutilizza in pedalSoon(t1) per il vincolo temporale.
-Pedal = {let t1; noteOnT(t1) other* pedalSoon(t1)};
-
-// Main: ripetibile zero o piu' volte — ogni occorrenza e' una nota
-// seguita correttamente dalla pressione sincopata del pedale.
-Main = Pedal*;
+// Il rilascio e' libero: puo' arrivare quando arriva.
+Main = (plainNote \/ pedalRelease \/ Region)*;

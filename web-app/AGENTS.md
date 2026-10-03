@@ -49,7 +49,7 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 - `@typescript-eslint/no-explicit-any: off` for `src/hooks/usePracticeMode.ts` and `src/pages/ScorePage.tsx` — OSMD and `musicxml-player` ship no usable type definitions
 - `react-hooks/globals`, `react-hooks/immutability`, `react-hooks/rules-of-hooks: off` for `src/hooks/useMidi.test.ts` — that file is a hand-rolled hook harness that runs outside a React render tree
 
-Two `set-state-in-effect` suppressions exist inline, each with the reasoning in a comment: `useMidi.ts` (selection must follow the port that actually delivers, and `selectInput` is an explicit user override) and `MetricsTestPage.tsx` (drains the MIDI hook's external event buffer). Both are external-system synchronization, not render-time derivation.
+One `set-state-in-effect` suppression remains inline, with the reasoning in a comment: `useMidi.ts` (selection must follow the port that actually delivers, and `selectInput` is an explicit user override). It is external-system synchronization, not render-time derivation. The former second one lived in `MetricsTestPage.tsx`, removed with the page.
 
 ## Child Doc Shape
 
@@ -91,6 +91,6 @@ When the user requests a durable behavior change, record it here or in the relev
 ## Child DOX Index
 
 - `src/` — Application source root: React entry point (`main.tsx`), top-level router (`App.tsx`), global stylesheets, and three durable subdomains:
-  - `src/pages/` — Route-level page components (HomePage, UploadPage, ScorePage, MetricsTestPage)
+  - `src/pages/` — Route-level page components (HomePage, UploadPage, ScorePage)
   - `src/components/` — Reusable presentational components (MidiPanel, PlaybackBar, StaffToggle)
-  - `src/hooks/` — Domain-logic hooks (useMidi, usePracticeMode)
+  - `src/hooks/` — Domain-logic hooks (useMidi, usePracticeMode, useVerdict)

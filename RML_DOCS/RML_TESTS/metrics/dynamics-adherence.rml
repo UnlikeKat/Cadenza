@@ -1,34 +1,54 @@
 // Metric: dynamics-adherence
-// Verifica che ogni nota con dinamica "forte" abbia rawAttack >= 80
-// rawAttack e' la velocity MIDI (0-127). Una nota e' "forte" se rawAttack >= 80.
-// NOTA: FR-002 e' una specifica di soglia auto-contenuta, non un confronto
-// con lo spartito. Il verdetto True significa "questa esecuzione contiene
-// almeno una nota forte", False "nessuna". Per verificare l'aderenza alla
-// dinamica notata servirebbe lo spartito: e' la metrica difficile, fuori
-// dalle 6 di Fase 1.
+// Verifica che ogni nota sia suonata alla dinamica che lo spartito chiede in
+// quel punto, non a una soglia fissa.
+//
+// Il campo expected.dyn arriva dal JOIN (alignment/join.py): e' la velocity
+// MIDI della dinamica che copre la battuta in cui la nota e' caduta, secondo
+// l'allineamento con lo spartito. expected.dynExplicit dice se quel valore
+// e' scritto nello spartito o e' un fallback: senza di questo non si puo'
+// distinguere "suoni piano" da "qui non c'e' niente scritto".
+//
+// Il JOIN non giudica nulla. Mette a confronto i numeri e lascia che sia
+// questa specifica a dire se la differenza e' accettabile. Cambiare la
+// tolleranza e' cambiare la constante qui sotto, non ricompilare Python.
+//
+// Tolleranza: una nota e' troppo leggera se suona sotto il 70% della dinamica
+// attesa. Il 30% di margine serve perche' su un pianoforte reale nessuno
+// rispetta un livello notato al grammo.
 
-// noteOn: fa match con qualsiasi evento 'noteon', estraendo il numero
-// della nota e la velocity (rawAttack).
-noteOn(num, vel) matches {type:'noteon', note:{number:num, rawAttack:vel}};
+markedNote(num, vel, dyn) matches
+    {type:'noteon', note:{number:num, rawAttack:vel},
+     expected:{dynExplicit:true, dyn:dyn}};
 
-// Alias wildcard: fa match con qualsiasi evento noteOn (arity-0).
-// Il wildcard cattura ogni evento noteon senza estrarre campi.
-noteOn matches noteOn(_, _);
+// Il cuore della regola: il vincolo numerico di RML, risolto da CLP(Q).
+inAdherence(num, vel, dyn) matches markedNote(num, vel, dyn) with 0.7 * dyn <= vel;
 
-// forteNote: noteon con dinamica forte.
-// Il vincolo 'with' assicura che rawAttack sia >= 80.
-forteNote(num, vel) matches noteOn(num, vel) with vel >= 80;
+inAdherence matches inAdherence(_, _, _);
 
-// Alias arity-0: necessario per l'uso in Main.
-forteNote matches forteNote(_, _);
+// Nota in un punto dello spartito senza dinamica scritta: nessun vincolo.
+// Resta comunque un noteon, quindi la traccia deve accettarla.
+unmarkedNote matches {type:'noteon', expected:{dynExplicit:false}};
+unmarkedNote matches unmarkedNote(_);
 
-// Main: ogni evento noteon della traccia deve essere forte (rawAttack >= 80).
-// Correzione 2026-09-26. La specifica originale era (noteOn >> forteNote)*,
-// che e' sbagliata per due motivi:
-//  1) >> in RML e' un FILTRO (ET>>T = T/\ET* | notET*), non una sequenza;
-//  2) concatenando noteOn a forteNote, entrambi matchano lo STESSO evento,
-//     quindi la coppia richiederebbe due eventi forti consecutivi.
-// La stella e' postfissa sul tipo evento (forteNote*), come in piano-test.rml:
-// star(forteNote) non compila, genera un tipo inesistente.
-// Sul monitor reale non esiste un verdetto a 4 valori: solo accepted/rejected.
-Main = forteNote*;
+// La traccia del JOIN contiene anche noteoff e controlchange del pedale. Qui
+// la regola riguarda gli attacchi: il filtro >> tiene nel flusso solo i
+// noteon e lascia fuori tutto il resto, quindi non serve una regola che li
+// faccia passare "senza giudicarli".
+//
+// Il tipo del filtro DEVE essere privo del vincolo. Con `noteOn >> ...`, dove
+// noteOn porta gia' dentro la condizione 21..108, il filtro scarta la nota
+// fuori intervallo invece di segnalarla: verificato, la traccia sbagliata
+// passava. Con anyNoteOn, non vincolato, il filtro lascia passare tutti gli
+// attacchi e poi e' noteOn a bocciare quello che non torna.
+anyNoteOn matches {type:'noteon'};
+
+// Ogni attacco e' o una nota che rispetta la dinamica attesa, o una nota dove
+// lo spartito non dice niente. Basta uno dei due per proseguire.
+//
+// Due dettagli di sintassi, verificati a runtime e non a memoria:
+//  - l'unione fra espressioni e' `\/`. Il `|` che si vede nelle dichiarazioni
+//    `matches` non vale qui dentro: letto come sequenza, consumerebbe due
+//    eventi per passo e la traccia intera non quadrarebbe piu'.
+//  - serve l'alias a zero argomenti (`inAdherence matches inAdherence(_,_,_)`):
+//    `inAdherence*` senza alias genera un tipo che non esiste.
+Main = anyNoteOn >> (inAdherence \/ unmarkedNote)*;

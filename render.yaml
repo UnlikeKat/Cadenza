@@ -1,0 +1,22 @@
+# Un servizio solo.
+#
+# Le sette metriche NON richiedono sette servizi: girano nello stesso container,
+# in processi SWI-Prolog separati, una dopo l'altra, e si distinguono per exit
+# code. Il vincolo che rendeva necessari sette servizi valeva per il monitor in
+# streaming (una sola porta per servizio, stato vivo tra gli eventi). Con il
+# verdetto a fine esecuzione quel vincolo scompare: restano sette processi, ma
+# dentro una richiesta.
+#
+# Uso: render blueprint launch
+services:
+  - type: web
+    name: cadenza
+    runtime: docker
+    dockerfilePath: ./service/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

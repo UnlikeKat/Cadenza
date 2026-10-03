@@ -7,8 +7,23 @@
 // il numero sia compreso tra 21 (A0) e 108 (C8).
 noteOn(num) matches {type:'noteon', note:{number:num}} with num >= 21 && num <= 108;
 
-// noteOn senza argomenti fa match con qualsiasi evento noteOn
+// nota senza argomenti fa match con qualsiasi evento noteOn
 noteOn matches noteOn(_);
 
-// Main accetta una sequenza di zero o piu' eventi noteOn
-Main = noteOn*;
+// Qui la traccia e' quella del JOIN, che contiene noteon, noteoff e
+// controlchange. Il filtro >> tiene nel flusso solo gli attacchi, cosi' i
+// noteoff e i cambi di pedale non interrompono la regola.
+//
+// 21 e 108 NON sono numeretti cablati a caso: sono gli estremi della tastiera
+// standard a 88 tasti, che e' la stessa su ogni pianoforte. Sono l'unica
+// eccezione giustificata, e vale la pena dirlo perche' questa metrica vale
+// su qualunque brano.
+//
+// anyNoteOn e' volutamente privo del vincolo, ed e' il punto piu' delicato
+// della specifica. Se il filtro usasse il tipo gia' vincolato, la nota fuori
+// tastiera verrebbe scartata dal filtro e non arriverebbe mai a noteOn: la
+// regola risulterebbe soddisfatta proprio nel caso che doveva segnalare.
+// Verificato: con il filtro vincolato la traccia sbagliata passava.
+anyNoteOn matches {type:'noteon'};
+
+Main = anyNoteOn >> noteOn*;

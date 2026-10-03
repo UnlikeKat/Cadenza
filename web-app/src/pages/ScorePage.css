@@ -50,6 +50,66 @@
   padding: 0 1rem;
 }
 
+/* ── Verdicts ─────────────────────────────────────────── */
+/* I sette verdetti arrivano gia' calcolati dal servizio RML. Qui non c'e'
+   nessuna soglia: si mostra solo quello che Prolog ha risposto. */
+
+.verdict-panel {
+  margin: 2rem auto;
+  padding: 1.5rem 2rem;
+  max-width: 46rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 12px;
+}
+
+.verdict-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.verdict-note { color: #6b6b6b; font-size: 0.9rem; margin: 0.25rem 0 1rem; }
+.verdict-error { color: #b3261e; }
+
+.verdict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.verdict-list li {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.95rem;
+}
+
+.verdict-ok { background: rgba(76, 175, 80, 0.10); border-color: rgba(76, 175, 80, 0.4); }
+.verdict-bad { background: rgba(179, 38, 30, 0.10); border-color: rgba(179, 38, 30, 0.4); }
+
+.verdict-mark { font-weight: 700; }
+.verdict-ok .verdict-mark { color: #2e7d32; }
+.verdict-bad .verdict-mark { color: #b3261e; }
+
+.verdict-detail { color: #6b6b6b; font-size: 0.85rem; }
+
+/* Forced colors (Windows ad alto contrasto): gli sfondi verde/rosso spariscono,
+   quindi la distinzione la devono portare il segno e il testo, non il colore. */
+@media (forced-colors: active) {
+  .verdict-list li { border-color: CanvasText; background: Canvas; }
+  .verdict-ok .verdict-mark { color: CanvasText; }
+  .verdict-bad .verdict-mark { color: CanvasText; }
+}
+
 /* Override musicxml-player default styles to match our theme */
 .sheet-container .player-sheet {
   background: transparent;
