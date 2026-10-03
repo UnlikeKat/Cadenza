@@ -121,7 +121,9 @@ def analyse(body):
         # clausole sono identiche, cambia solo quante volte si avvia
         # l'interprete. batch.pl se ne occupa e scrive "<nome> <exit>" per riga.
         # exit 0 = traccia conforme, 1 = violata.
-        specs = [os.path.join(SPECS, "%s.pl" % name) for name in METRICS]
+        specs = []
+        for name in METRICS:
+            specs += [name, os.path.join(SPECS, "%s.pl" % name)]
         proc = subprocess.run(
             ["swipl", "-O", "-p", "monitor=%s" % MONITOR,
              os.path.join(ROOT, "batch.pl"), "--", trace] + specs,
