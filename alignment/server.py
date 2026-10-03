@@ -34,6 +34,8 @@ from join import ScoreModel, join, to_jsonl
 
 MONITOR = os.environ.get("RML_MONITOR", "/opt/rml")
 SPECS = os.environ.get("RML_SPECS", "/opt/specs")
+# batch.pl sta accanto a server.py: stessa directory, quindi stesso ROOT.
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # Le sette metriche. Ogni nome e' anche il file <nome>.pl in SPECS.
 METRICS = ("articulation", "chord-jitter", "dynamics-adherence", "pedal-toggle",
@@ -112,18 +114,28 @@ def analyse(body):
         with open(trace, "w", encoding="utf-8") as f:
             f.write(to_jsonl(events) + "\n")
 
-        # Un monitor per metrica, in processi separati: un processo SWI-Prolog
+        # Le sette specifiche in un solo processo Prolog. Un processo SWI-Prolog
         # regge una sola specifica RML (match/2 viene importata in `user`, e
-        # importarne una seconda nella stessa VM fallisce). In processi separati
-        # non c'e' conflitto. exit 0 = traccia conforme, 1 = violata.
+        # importarne una seconda nella stessa VM fallisce), quindi qui si
+        # caricano e si scaricano una alla volta dentro la stessa VM: le
+        # clausole sono identiche, cambia solo quante volte si avvia
+        # l'interprete. batch.pl se ne occupa e scrive "<nome> <exit>" per riga.
+        # exit 0 = traccia conforme, 1 = violata.
+        specs = [os.path.join(SPECS, "%s.pl" % name) for name in METRICS]
+        proc = subprocess.run(
+            ["swipl", "-O", "-p", "monitor=%s" % MONITOR,
+             os.path.join(ROOT, "batch.pl"), "--", trace] + specs,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
         verdicts = {}
+        for line in proc.stdout.decode().splitlines():
+            parts = line.split()
+            if len(parts) != 2 or parts[0] not in METRICS:
+                continue
+            name, code = parts
+            verdicts[name] = (code == "0", int(code), "")
         for name in METRICS:
-            spec = os.path.join(SPECS, "%s.pl" % name)
-            p = subprocess.run(
-                ["swipl", "-O", "-p", "monitor=%s" % MONITOR,
-                 os.path.join(MONITOR, "monitor.pl"), "--", spec, trace, "--silent"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60)
-            verdicts[name] = (p.returncode == 0, p.returncode, p.stderr.decode()[-400:])
+            if name not in verdicts:
+                verdicts[name] = (False, 2, proc.stderr.decode()[-400:])
         return verdicts, events
 
 

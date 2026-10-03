@@ -63,6 +63,7 @@ COPY RML_DOCS/RML_TESTS/monitor/ /opt/rml/
 COPY --from=specs /specs/             /opt/specs/
 COPY alignment/join.py   /opt/join.py
 COPY alignment/server.py /opt/server.py
+COPY service/batch.pl     /opt/batch.pl
 
 # Una specifica mancante o vuota deve far fallire la build, non produrre un
 # servizio che risponde "conforme" perche' non ha guardato niente.
