@@ -30,6 +30,10 @@ COPY RML_DOCS/RML_TESTS/metrics/ /src/
 
 RUN set -e; \
     mkdir -p /specs; \
+    # git non conserva il bit di esecuzione sui clone fatti da Windows: senza
+    # questo chmod il launcher arriva non eseguibile e muore con "Permission
+    # denied", exit 126. Non fidarsi del bit, impostarlo qui.
+    chmod +x /opt/rmlc/bin/rml-compiler; \
     for f in /src/*.rml; do \
         /opt/rmlc/bin/rml-compiler --input "$f" --output "/specs/$(basename "$f" .rml).pl"; \
     done; \
