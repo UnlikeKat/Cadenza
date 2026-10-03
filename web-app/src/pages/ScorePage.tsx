@@ -37,8 +37,22 @@ const METRIC_LABELS: Record<string, string> = {
  */
 type Phase = 'idle' | 'countdown' | 'playing';
 
-/** Quanto prima della fine scatta il verdetto, in ms. */
-const END_TOLERANCE_MS = 250;
+/**
+ * Margine con cui `position` si considera arrivato alla fine.
+ *
+ * Non è una tolleranza arbitraria: `Player.position` è definito come
+ * `min(currentTime * 1000, duration - 1)`, quindi non può MAI raggiungere
+ * `duration`. Con un margine generoso il brano finiva 250 ms prima del vero
+ * fondo e l'ultima nota restava fuori dal verdetto. Qui si segue il tetto
+ * reale, con 1 ms di respiro per l'arrotondamento in virgola mobile.
+ */
+const END_SLACK_MS = 2;
+
+/**
+ * Se `position` resta fermo mentre si dovrebbe sentire qualcosa, il sequencer
+ * non arrivera' mai al fondo. Chiudere la prova e' meglio che non darla mai.
+ */
+const STALL_MS = 2000;
 
 /** Silenzio fra un numero e l'altro del countdown, in ms. */
 const COUNTDOWN_STEP_MS = 750;
@@ -78,6 +92,17 @@ const ScorePage: React.FC = () => {
       console.error('[ScorePage] Non sono riuscito a leggere lo spartito:', err);
     }
   }, [file, verdict]);
+
+  // Il verdetto arriva da solo, a fine brano, mentre l'attenzione è sullo
+  // spartito: senza questo il pannello si aprirebbe sotto la piega e sembrerebbe
+  // non essere arrivato. Lo scroll-margin-bottom in .verdict-panel gli impedisce
+  // di fermarsi sotto la barra dei comandi.
+  const verdictPanelRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (verdict.status === 'done') {
+      verdictPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [verdict.status]);
 
   // Re-enable MIDI from upload page state
   useEffect(() => {
@@ -131,23 +156,41 @@ const ScorePage: React.FC = () => {
   }, [phase, count]);
 
   // Avanziamento e fine brano. PlayerState non ha uno stato "finito" e il player
-  // non emette eventi, quindi la fine si deduce confrontando position e
-  // duration. Senza tolleranza l'ultimo millisecondo verrebbe tagliato e il
-  // brano risulterebbero più corto di quanto lo hai suonato.
+  // non emette eventi, quindi la fine si deduce da position contro duration.
+  // position è bloccato a duration - 1 dal player stesso: la soglia segue quel
+  // tetto, non un margine arbitrario, altrimenti il brano chiude prima del
+  // fondo reale e l'ultima nota resta fuori dal verdetto.
   useEffect(() => {
     if (phase === 'countdown') return;
     if (phase === 'idle' && !isPlaying) return;
     let animationId: number;
-    const tick = () => {
+    let lastPos = -1;
+    let stalledSince = 0;
+    const tick = (now: number) => {
       const player = playerRef.current;
       if (player) {
         const dur = player.duration;
         const pos = player.position;
         if (dur > 0) {
           setProgress((pos / dur) * 100);
-          if (phase === 'playing' && pos >= dur - END_TOLERANCE_MS) {
-            void finishPlayAlong();
-            return;
+          if (phase === 'playing') {
+            if (pos >= dur - END_SLACK_MS) {
+              void finishPlayAlong();
+              return;
+            }
+            // Rete di sicurezza: il sequencer fermo prima del fondo non
+            // arriverebbe mai a duration, e la prova resterebbe aperta per
+            // sempre senza che nessuno lo noti.
+            if (pos === lastPos) {
+              if (stalledSince === 0) stalledSince = now;
+              else if (now - stalledSince > STALL_MS) {
+                void finishPlayAlong();
+                return;
+              }
+            } else {
+              lastPos = pos;
+              stalledSince = 0;
+            }
           }
         }
       }
@@ -365,7 +408,7 @@ const ScorePage: React.FC = () => {
 
       {/* Verdicts — appear only after the performance has been analysed */}
       {verdict.status !== 'idle' && (
-        <section className="verdict-panel">
+        <section className="verdict-panel" ref={verdictPanelRef}>
           <div className="verdict-panel-head">
             <h2 className="heading">Il verdetto</h2>
             {verdict.status === 'done' && (

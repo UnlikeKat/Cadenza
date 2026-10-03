@@ -2,6 +2,10 @@
   min-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
+  /* La barra dei comandi è position:fixed a 5rem di altezza con 1.5rem dal
+     basso. Senza questo spazio l'ultimo elemento della pagina — il pannello dei
+     verdetti — finisce sotto la barra e non si legge. */
+  padding-bottom: 7rem;
 }
 
 /* Header — simplified: just back button + title */
@@ -61,6 +65,9 @@
   background: var(--surface, #fff);
   border: 1px solid var(--border, #e5e5e5);
   border-radius: 12px;
+  /* Allineato in fondo dalla barra dei comandi, che è fixed: senza questo
+     scrollIntoView fermerebbe il pannello esattamente sotto di lei. */
+  scroll-margin-bottom: 7rem;
 }
 
 .verdict-panel-head {
@@ -193,7 +200,9 @@
   gap: 0.75rem;
   background: rgba(252, 251, 248, 0.82);
   backdrop-filter: blur(8px);
-  z-index: 900;
+  /* Sopra la barra dei comandi (z-index 1000): durante il countdown i suoi
+     pulsanti sono disabilitati, lasciarla davanti sarebbe solo rumore. */
+  z-index: 1100;
   animation: fade-in 0.25s ease both;
 }
 
