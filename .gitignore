@@ -28,9 +28,15 @@ desktop.ini
 *.sln
 
 # === RML cloned repos (not part of final project) ===
+# compiler/ e running_examples/ restano fuori: sono sorgenti upstream, non
+# nostre, e il compiler è già vendorizzato compilato in vendor/rml-compiler/.
 RML_DOCS/RML_TESTS/compiler/
-RML_DOCS/RML_TESTS/monitor/
 RML_DOCS/RML_TESTS/running_examples/
+
+# monitor/ NON è escluso, anche se sta sotto RML_TESTS: è la libreria Prolog che
+# il servizio esegue a ogni richiesta. Senza, Render clona un repo dove il
+# Dockerfile fa COPY di una cartella inesistente e la build muore.
+# È MIT (RML@DIBRIS) e la sua LICENSE è dentro la cartella.
 
 # === RML generated (build-pl.ps1) ===
 RML_DOCS/RML_TESTS/metrics/*.pl
