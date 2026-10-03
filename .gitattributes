@@ -8,6 +8,11 @@
 # vanno eseguiti in un container Linux: LF obbligatorio
 *.sh    text eol=lf
 gradlew text eol=lf
+# il launcher del compiler vendorizzato non ha estensione .sh: senza questa
+# riga "* text=auto" lo committa come LF ma lo riporta CRLF al checkout, e in
+# container diventa /bin/sh: not found
+vendor/rml-compiler/bin/rml-compiler text eol=lf
+vendor/rml-compiler/**/*.sh       text eol=lf
 
 # specifiche RML e Prolog: il confronto e' byte per byte con la compilazione
 # locale, quindi i fine-riga non devono cambiare
