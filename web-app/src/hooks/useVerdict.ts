@@ -10,9 +10,20 @@ import type { MidiEvent } from './useMidi';
  * trasporto.
  */
 
-/** Endpoint del servizio. In sviluppo gira in locale sul 8080. */
+/**
+ * Endpoint del servizio.
+ *
+ * Il default e' il servizio deployato, non 127.0.0.1: questo URL e' pubblico e
+ * non e' un segreto, quindi non ha senso proteggerlo dietro una variabile
+ * d'ambiente da ricordare a ogni deploy. Senza questo, dimenticare la variabile
+ * significa un frontend che punta silenziosamente al portatile di chi l'ha
+ * scritto, e il pannello dei verdetti fallisce solo sul computer del relatore.
+ *
+ * VITE_CADENZA_API resta per lo sviluppo in locale.
+ */
 export const API_URL =
-  (import.meta.env.VITE_CADENZA_API as string | undefined) ?? 'http://127.0.0.1:8080';
+  (import.meta.env.VITE_CADENZA_API as string | undefined) ??
+  'https://cadenza-etji.onrender.com';
 
 export interface PerformedNote {
   time_ms: number;

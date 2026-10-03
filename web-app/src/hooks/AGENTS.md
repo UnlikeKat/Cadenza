@@ -8,7 +8,8 @@ Stateful React hooks that encapsulate cross-cutting domain logic — MIDI device
 
 - `useMidi.ts` — Web MIDI API integration via the `webmidi` package. Manages device enumeration, enable/disable lifecycle, input selection, live note-on/note-off tracking, two event streams, and hot-plug (connect/disconnect) events. Returns `UseMidiReturn` (the interface consumed by `MidiPanel` and `ScorePage`).
 - `usePracticeMode.ts` — Note-by-note practice engine built on OSMD's native cursor API. Drives cursor reset, expected-pitch extraction, MIDI matching with 250 ms chord tolerance, gold/green note coloring, rest/tie auto-advance, and treble/bass staff toggling. Returns `PracticeModeReturn`.
-- `useVerdict.ts` — Carries a finished performance to the Cadenza service and holds the seven RML verdicts. `toPerformance(events)` is a pure function, exported for testing, converting the MIDI stream into the payload the service validates. It contains no threshold and no verdict: the verdict is computed in Prolog. `API_URL` comes from `VITE_CADENZA_API` and defaults to `http://127.0.0.1:8080`.
+- `useVerdict.ts` — Carries a finished performance to the Cadenza service and holds the seven RML verdicts. `toPerformance(events)` is a pure function, exported for testing, converting the MIDI stream into the payload the service validates. It contains no threshold and no verdict: the verdict is computed in Prolog. `API_URL` defaults to the deployed service `https://cadenza-etji.onrender.com`; `VITE_CADENZA_API` overrides it for local development.
+- The deployed URL is the default on purpose. It is a public address, not a secret, so hiding it behind an env var only created a way to forget it — and a forgotten env var points the app at the author's own machine, where the verdict panel silently fails. Change the URL in source when the service moves, and redeploy.
 
 ## Local Contracts
 
